@@ -59,7 +59,7 @@ Markdown解析/
 │       ├── editor.bundle.js           ← Monaco 编辑器离线包（含 worker，Blob 内联）
 │       └── editor.bundle.css          ← 编辑器样式（字体 data URI 内联）
 ├── editor-build/                      ← Monaco 离线包构建工程（维护用）
-├── 墨阅解析.html  ← 单文件离线版（构建产物）
+├── InkMark.html                       ← 单文件离线版（构建产物，在 release 里）
 ├── 构建单文件版.js                     ← 单文件版构建脚本（Node.js）
 └── 测试.md                            ← 功能覆盖测试样例
 ```

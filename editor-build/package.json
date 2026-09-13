@@ -1,0 +1,10 @@
+{
+  "name": "moyue-editor-build",
+  "private": true,
+  "description": "构建墨阅内置 Monaco 编辑器离线包（输出到 ../lib/monaco/）",
+  "scripts": { "build": "node build.js" },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "monaco-editor": "0.56.0"
+  }
+}

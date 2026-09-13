@@ -97,6 +97,17 @@ window.MathJax = {
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* 主题切换过渡：只在切换瞬间由 JS 给 <html> 加 .theme-anim（常驻会拖慢滚动与交互） */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-anim,
+  html.theme-anim *,
+  html.theme-anim *::before,
+  html.theme-anim *::after {
+    transition: background-color .34s ease, color .34s ease, border-color .34s ease,
+                fill .34s ease, stroke .34s ease, box-shadow .34s ease !important;
+    transition-delay: 0s !important;
+  }
+}
 [hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
@@ -470,6 +481,9 @@ body.edit-mode.edit-stacked #editorPane { order: 2; width: 100%; height: 50%; bo
 .markdown-body thead th { background: var(--surface-2); font-weight: 650; color: var(--text-strong); font-family: var(--font-ui); font-size: .95em; }
 .markdown-body tbody tr:nth-child(even) td { background: var(--surface-1); }
 .markdown-body img { display: block; max-width: 100%; height: auto; margin: 1.2em auto; border-radius: 12px; box-shadow: var(--shadow-sm); }
+/* 独占一段的图（logo / 徽标）给个下限：不少 SVG 图标自带 width="1em"，按原尺寸只有 16px 太小 */
+.markdown-body p > img:only-child,
+.markdown-body p > a:only-child > img:only-child { min-width: min(3em, 100%); }
 .markdown-body hr {
   border: 0; height: 1px; width: 58%; margin: 2.2em auto;
   background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
@@ -503,7 +517,45 @@ body.edit-mode.edit-stacked #editorPane { order: 2; width: 100%; height: 50%; bo
 .markdown-body .footnotes hr { width: 100%; margin: 0 0 1em; }
 .markdown-body .footnotes ol { padding-left: 1.4em; margin: 0; }
 .markdown-body .footnotes li { margin: .35em 0; }
-.markdown-body .footnotes li:target { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; padding: .1em .4em; }
+.markdown-body .footnote-back {
+  margin-left: .4em; color: var(--accent); text-decoration: none;
+  border-bottom: 0; font-size: .95em; white-space: nowrap;
+}
+.markdown-body .footnote-back:hover { text-decoration: underline; }
+/* 跳转落点高亮（脚注条目 / 正文引用上标 / 标题锚点） */
+.markdown-body .footnotes li:target,
+.markdown-body .footnotes li.fn-flash {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 6px; padding: .1em .4em;
+}
+.markdown-body .footnote-ref:target a,
+.markdown-body .footnote-ref.fn-flash a {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 4px; padding: 0 .2em;
+}
+/* 标题锚点落点：只画底色 + 外扩光圈，不加内边距，避免高亮时版面跳动 */
+.markdown-body :is(h1, h2, h3, h4, h5, h6).fn-flash {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 .35em color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* ===== 隐藏内容遮罩（||spoiler||，Discord 同款：黑条遮住，点击显示） ===== */
+.markdown-body .spoiler {
+  background: color-mix(in srgb, var(--text) 26%, transparent);
+  color: transparent;
+  border-radius: 5px; padding: 0 .22em;
+  cursor: pointer;
+  -webkit-user-select: none; user-select: none;
+  transition: background-color .16s ease, color .16s ease;
+}
+.markdown-body .spoiler:hover { background: color-mix(in srgb, var(--text) 34%, transparent); }
+.markdown-body .spoiler:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.markdown-body .spoiler.revealed {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: inherit; cursor: text;
+  -webkit-user-select: auto; user-select: auto;
+}
 
 /* ============ 拖拽浮层 ============ */
 #dropOverlay {
@@ -882,9 +934,17 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
         continue;
       }
 
-      /* 列表（整块收集后递归解析） */
+      /* 列表（整块收集后递归解析）
+       * 一块只收同一种列表：有序 ↔ 无序在 CommonMark 里就是两个列表。
+       * 若并成一块，有序项会被顺带渲染成无序（标签只取首项），且块内空行会把整块判为 loose，
+       * 于是每项外面套一层 <p>（.markdown-body p 有 .95em 上下边距）——表现为行距突然变大 */
       if (isList(line)) {
         var itemIndent = line.match(/^\s*/)[0].length;
+        var orderedList = /\d/.test(listRe.exec(line)[2]);
+        var sameKind = function (l) {
+          var mm = listRe.exec(l);
+          return !!mm && /\d/.test(mm[2]) === orderedList;
+        };
         var region = [];
         while (i < n) {
           var l = lines[i];
@@ -893,11 +953,15 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
             while (j < n && isBlank(lines[j])) j++;
             if (j >= n) break;
             var indN = lines[j].match(/^\s*/)[0].length;
+            /* 同级但换了列表类型 → 另一个列表，另起一块 */
+            if (isList(lines[j]) && indN === itemIndent && !sameKind(lines[j])) break;
             if ((isList(lines[j]) && indN >= itemIndent) || (indN > itemIndent && !isBlockStart(lines[j]))) { region.push(l); i++; continue; }
             break;
           }
           var ind = l.match(/^\s*/)[0].length;
           if (isBlockStart(l)) break;
+          /* 紧邻的同类项才属于本列表（缩进更深的子列表仍归入本块） */
+          if (isList(l) && ind === itemIndent && !sameKind(l)) break;
           if (ind >= itemIndent) { region.push(l); i++; continue; }
           break;
         }
@@ -1020,8 +1084,9 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   }
 
   /* 扫描 ![alt](url) 与 [text](url)；URL 支持成对括号与可选 title；命中处用占位符保护。
-   * 分两阶段：先图片后链接，使 [![alt](img)](url) 这类"链接内嵌图片"能正确解析 */
-  function scanLinks(s, push, opts) {
+   * 分两阶段：先图片后链接，使 [![alt](img)](url) 这类"链接内嵌图片"能正确解析。
+   * ph 为外层共享的占位符数组：链接文字 / 隐藏内容里再解析出的占位符也用同一份索引，避免索引串号丢内容 */
+  function scanLinks(s, push, opts, ph) {
     /* 阶段 1：图片 */
     var out1 = '', i = 0, n = s.length;
     while (i < n) {
@@ -1068,7 +1133,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
               url2 = dest2.slice(0, ws2);
               title2 = dest2.slice(ws2).trim().replace(/^["']|["']$/g, '');
             }
-            var inner = inline(text2, { noLinks: true, escaped: true, noRestore: true });
+            var inner = inline(text2, { noLinks: true, escaped: true, noRestore: true, _ph: ph });
             var ext = /^https?:/i.test(url2);
             out2 += push('<a href="' + esc(safeUrl(url2)) + '"' + (ext ? ' target="_blank" rel="noopener noreferrer"' : '') + (title2 ? ' title="' + esc(title2) + '"' : '') + '>' + inner + '</a>');
             i2 = d2.end;
@@ -1085,7 +1150,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   /* 行内解析（含代码/链接保护、转义、强调、自动链接） */
   function inline(src, opts) {
     opts = opts || {};
-    var ph = [];
+    var ph = opts._ph || []; /* 嵌套调用（链接文字 / 隐藏内容）与外层共用同一份占位符 */
     var s = String(src);
     var push = function (htmlStr) { ph.push(htmlStr); return '\u0000' + (ph.length - 1) + '\u0000'; };
 
@@ -1100,8 +1165,11 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     /* 2. HTML 转义 */
     if (!opts.escaped) s = esc(s);
 
-    /* 2.5 硬换行（行尾两个空格） */
-    s = s.replace(/ {2,}\n/g, '<br>\n');
+    /* 2.5 换行：行尾两个空格=硬换行；普通换行（软换行）同样保留为可见换行，
+     *     否则多行文本会被 HTML 折叠成一行。硬换行先用哨兵占位，最后与软换行合并成同一个 <br> */
+    s = s.replace(/ {2,}\n/g, '\u0000BR\u0000\n');
+    s = s.replace(/\n/g, '<br>\n');
+    s = s.replace(/\u0000BR\u0000/g, '');
 
     /* 3. 行内代码 */
     s = s.replace(/(`+)([^`\n]*?)\1/g, function (m, t, inner) {
@@ -1118,13 +1186,20 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       return push('<sup class="footnote-ref" data-fn="' + esc(id) + '"><a href="#fn-' + esc(id) + '">[?]</a></sup>');
     });
 
+    /* 3.7 隐藏内容 ||spoiler|| → 遮罩（Discord 同款，点击显示）。放在行内代码/公式之后，
+     *     这样 `||x||`（代码里）与 $||x||$（公式里）不会被误判；\| 转义也不触发（反斜杠在第 4 步处理） */
+    s = s.replace(/\|\|([\s\S]+?)\|\|/g, function (m, inner) {
+      return push('<span class="spoiler" role="button" tabindex="0" title="点击显示隐藏内容">' +
+        inline(inner, { noLinks: opts.noLinks, escaped: true, noRestore: true, _ph: ph }) + '</span>');
+    });
+
     /* 4. 反斜杠转义（转义结果用占位符保护，不再参与后续解析，如 \* 显示为字面 *） */
     s = s.replace(/\\([\\`*_{}\[\]()#+\-.!|>~])/g, function (m, ch) {
       return push(esc(ch));
     });
 
     /* 5. 图片与链接（手工扫描：URL 支持成对括号，如 data URI / Wikipedia 链接） */
-    s = scanLinks(s, push, opts);
+    s = scanLinks(s, push, opts, ph);
 
     /* 6. 裸链接自动识别 */
     if (!opts.noLinks) {
@@ -1155,9 +1230,16 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
 
   function safeUrl(u, isImage) {
     u = String(u || '').trim();
-    if (/^(https?:|mailto:|ftp:|#|\/|\.\/|\.\.\/)/i.test(u)) return u;
-    if (isImage && /^data:image\//i.test(u)) return u;
-    return '#';
+    /* 根路径（/img/a.svg）在本地 file:// 下会指到磁盘根、GitHub Pages 子目录部署也会跑偏 → 一律相对本程序解析 */
+    if (/^\/(?!\/)/.test(u)) u = u.replace(/^\/+/, '');
+    /* 带协议头的只放行白名单（挡掉 javascript: / data:text/html 等），其余按相对路径处理 */
+    if (/^[a-z][a-z0-9+.-]*:/i.test(u)) {
+      if (/^(https?|mailto|ftp):/i.test(u)) return u;
+      if (isImage && /^data:image\//i.test(u)) return u;
+      return '#';
+    }
+    if (u.charAt(0) === '#') return u;
+    return u || '#';
   }
 
   /* ---------- 代码语法高亮（轻量） ---------- */
@@ -1217,13 +1299,31 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     return out.join('\n');
   }
 
+  /* 标题锚点：GitHub 风格 slug（去掉行内标记、空格转连字符、重名依次 -1/-2），
+   * 让正文里的 [文字](#标题) 能跳转；每渲染一次文档重置一次计数 */
+  var slugSeen = {};
+  function slugifyHeading(text) {
+    var t = String(text)
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/[*_~]/g, '')
+      .trim().toLowerCase()
+      .replace(/[^\p{L}\p{N}\s_-]+/gu, '')
+      .replace(/\s+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (!t) t = 'section';
+    var n = slugSeen[t] || 0;
+    slugSeen[t] = n + 1;
+    return n ? t + '-' + n : t;
+  }
+
   function renderBlock(t, opts) {
     switch (t.type) {
       case 'p':
         return opts.tight ? inline(t.text) : '<p>' + inline(t.text) + '</p>';
       case 'h':
         var lvl = Math.min(6, Math.max(1, t.level));
-        return '<h' + lvl + '>' + inline(t.text) + '</h' + lvl + '>';
+        return '<h' + lvl + ' id="' + esc(slugifyHeading(t.text)) + '">' + inline(t.text) + '</h' + lvl + '>';
       case 'hr':
         return '<hr>';
       case 'math':
@@ -1288,6 +1388,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   }
 
   function renderDoc(md) {
+    slugSeen = {}; /* 标题锚点计数按文档重置（大标题/引用块里的标题共用一套去重） */
     /* 收集脚注定义 [^id]: 内容（支持后续缩进延续行），从正文移除 */
     var fnMap = {}, fnOrder = [];
     var body = String(md).replace(/^\[\^([^\]]+)\]:[ \t]*(.*)(?:\n[ \t]+.*)*$/gm, function (m, id, first) {
@@ -1388,12 +1489,14 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     var accepted = [], rejected = [];
     list.forEach(function (file) { (isMarkdownFile(file) ? accepted : rejected).push(file); });
     var added = 0, updated = 0, skipped = 0;
+    var firstKey = ''; /* 本次导入的第一个文件：导入完成后自动切过去浏览 */
     var jobs = [];
     accepted.forEach(function (file) {
       /* 文件夹上传：webkitRelativePath 带相对路径（如 课程/第一章/a.md） */
       var rel = (file.webkitRelativePath || file.path || '').replace(/\\/g, '/');
       var key = (rel || file.name) + '|' + file.size;
       if (inFlight[key]) { skipped++; return; }
+      if (!firstKey) firstKey = key;
       inFlight[key] = true;
       jobs.push(readFile(file).then(function (buf) {
         var text = buf === null ? null : decodeText(buf);
@@ -1424,7 +1527,15 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       }).then(function () { delete inFlight[key]; }, function () { delete inFlight[key]; }));
     });
     Promise.all(jobs).then(function () {
-      if (state.active < 0 && state.files.length) state.active = state.files.length - 1;
+      /* 导入后立刻切到新文件（拖入时正在看别的文档也要切）；找不到才回退到「首次导入」逻辑 */
+      var idx = -1;
+      if (firstKey) {
+        for (var i = 0; i < state.files.length; i++) {
+          if (state.files[i].key === firstKey) { idx = i; break; }
+        }
+      }
+      if (idx >= 0) state.active = idx;
+      else if (state.active < 0 && state.files.length) state.active = state.files.length - 1;
       renderSidebar();
       renderReader();
       var msg = '';
@@ -1809,10 +1920,31 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     $('#editorStats').textContent = f && f.stats ? (fmtNum(f.stats.lines) + ' 行 · ' + fmtNum(f.stats.words) + ' 字') : '';
   }
 
+  /* 进出编辑模式时保持阅读进度：滚动容器会从「整页」换成「#reader 内部」，按当前视口顶部的内容块续读 */
+  var READ_TOP_PAD = 104; /* 顶栏高度 + 一点呼吸空间 */
+  function topVisibleBlock() {
+    var nodes = mdBody.children;
+    for (var i = 0; i < nodes.length; i++) {
+      var r = nodes[i].getBoundingClientRect();
+      if (r.height > 0 && r.bottom > READ_TOP_PAD) return nodes[i];
+    }
+    return mdBody.firstElementChild;
+  }
+  /* 整页滚动默认是平滑的（html{scroll-behavior:smooth}），换模式要瞬移，否则会「滑」一大段 */
+  function setPageScroll(y) {
+    var prev = html.style.scrollBehavior;
+    html.style.scrollBehavior = 'auto';
+    window.scrollTo(0, Math.max(0, y));
+    html.style.scrollBehavior = prev;
+  }
+
   function toggleEdit() {
     /* 未打开任何文件时：直接新建一个临时文档并进入编辑 */
     if (!currentFile()) { createNewDoc(); return; }
     var on = !isEditMode();
+    /* 先记住「正在读哪里」：已在顶部就不用管，直接走原来的回顶逻辑 */
+    var atTop = on ? (window.scrollY || document.documentElement.scrollTop || 0) < 2 : reader.scrollTop < 2;
+    var anchor = atTop ? null : topVisibleBlock();
     document.body.classList.toggle('edit-mode', on);
     btnEdit.classList.toggle('active', on);
     editorPane.hidden = !on;
@@ -1826,7 +1958,19 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
         ed.focus();
       }
       reader.scrollTop = 0;
-      requestAnimationFrame(function () { if (mdEditor) mdEditor.layout(); });
+      requestAnimationFrame(function () {
+        if (mdEditor) mdEditor.layout();
+        if (anchor) {
+          /* 让锚点块落回阅读区顶部，再把编辑器按比例对齐到同一位置 */
+          reader.scrollTop = Math.max(0, anchor.getBoundingClientRect().top - reader.getBoundingClientRect().top);
+          syncScroll('preview');
+        }
+      });
+    } else if (anchor) {
+      /* 退出编辑：预览回到「整页滚动」，把锚点块对回视口顶部 */
+      requestAnimationFrame(function () {
+        setPageScroll(window.scrollY + anchor.getBoundingClientRect().top - READ_TOP_PAD);
+      });
     }
   }
 
@@ -2205,20 +2349,111 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     });
   }
 
-  function postRender() {
-    /* 脚注编号：按文档中的定义顺序填充上标数字 */
-    var lis = mdBody.querySelectorAll('.footnotes ol li');
-    mdBody.querySelectorAll('.footnote-ref').forEach(function (sup) {
-      var id = sup.dataset.fn;
+  /* ---------- 脚注：编号 + 原文 ⇄ 解释 双向跳转 ---------- */
+  function bindFootnotes() {
+    var lis = Array.prototype.slice.call(mdBody.querySelectorAll('.footnotes ol li'));
+    var refs = Array.prototype.slice.call(mdBody.querySelectorAll('.footnote-ref'));
+
+    /* 幂等：postRender 可能对同一份 DOM 执行多次，先清掉上一轮生成的返回链接 */
+    Array.prototype.slice.call(mdBody.querySelectorAll('.footnote-back')).forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+
+    /* 1) 引用点：填充序号 + 唯一锚点 id（同一脚注被多次引用 → fnref-id / fnref-id-2 / …） */
+    var seen = {}, byFn = {};
+    refs.forEach(function (sup) {
+      var id = sup.getAttribute('data-fn') || '';
       var idx = -1;
       for (var k = 0; k < lis.length; k++) {
         if (lis[k].id === 'fn-' + id) { idx = k; break; }
       }
-      if (idx >= 0) {
-        var a = sup.querySelector('a');
-        a.textContent = idx + 1;
+      seen[id] = (seen[id] || 0) + 1;
+      sup.id = 'fnref-' + id + (seen[id] > 1 ? '-' + seen[id] : '');
+      var a = sup.querySelector('a');
+      if (a) {
+        a.setAttribute('href', '#fn-' + id);
+        if (idx >= 0) {
+          a.textContent = idx + 1;
+          a.setAttribute('title', '跳转到脚注 ' + (idx + 1));
+        }
       }
+      (byFn[id] = byFn[id] || []).push(sup);
     });
+
+    /* 2) 解释项：追加「返回原文」链接（原文引用几次就排几个 ↩，与 GitHub 一致） */
+    lis.forEach(function (li) {
+      var id = li.id.indexOf('fn-') === 0 ? li.id.slice(3) : '';
+      var group = byFn[id] || [];
+      group.forEach(function (sup) {
+        var back = document.createElement('a');
+        back.className = 'footnote-back';
+        back.setAttribute('href', '#' + sup.id);
+        back.setAttribute('title', '返回原文引用处');
+        back.setAttribute('aria-label', '返回原文引用处');
+        back.textContent = '↩';
+        li.appendChild(back);
+      });
+    });
+  }
+
+  /* 脚注跳转：原生 # 跳转在 hash 未变化时不会再次滚动，这里统一接管并闪一下高亮 */
+  var fnFlashTimer = null;
+  function flashFootnote(target) {
+    var el = target;
+    if (el.tagName !== 'LI') el = (el.closest && el.closest('.footnote-ref')) || el;
+    Array.prototype.slice.call(mdBody.querySelectorAll('.fn-flash')).forEach(function (n) { n.classList.remove('fn-flash'); });
+    el.classList.add('fn-flash');
+    if (fnFlashTimer) clearTimeout(fnFlashTimer);
+    fnFlashTimer = setTimeout(function () { el.classList.remove('fn-flash'); }, 1400);
+  }
+  function bindFootnoteJump() {
+    if (mdBody.dataset.fnJumpBound) return;
+    mdBody.dataset.fnJumpBound = '1';
+    mdBody.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a || !mdBody.contains(a)) return;
+      var id = (a.getAttribute('href') || '').slice(1);
+      if (!id) return;
+      try { id = decodeURIComponent(id); } catch (err) {}
+      var target = document.getElementById(id);
+      /* 界面元素可能占用了同名 id（如 reader）；正文里另有同 id 时以正文为准 */
+      if ((!target || !mdBody.contains(target)) && /^[^{}\[\]"\\]+$/.test(id)) {
+        var inBody = mdBody.querySelector('[id="' + id + '"]');
+        if (inBody) target = inBody;
+      }
+      if (!target || !mdBody.contains(target)) return; /* 正文内无此锚点 → 交回浏览器默认行为 */
+      e.preventDefault();
+      target.scrollIntoView({ block: 'center' });
+      flashFootnote(target);
+    });
+  }
+
+  /* 隐藏内容 ||spoiler||：点击（或键盘 Enter/空格）显示；显示后再点则按里面的链接走 */
+  function bindSpoilers() {
+    if (mdBody.dataset.spoilerBound) return;
+    mdBody.dataset.spoilerBound = '1';
+    var targetOf = function (e) { return e.target && e.target.closest ? e.target.closest('.spoiler') : null; };
+    mdBody.addEventListener('click', function (e) {
+      var sp = targetOf(e);
+      if (!sp || sp.classList.contains('revealed')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      sp.classList.add('revealed');
+    });
+    mdBody.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      var sp = targetOf(e);
+      if (!sp) return;
+      e.preventDefault();
+      sp.classList.add('revealed');
+    });
+  }
+
+  function postRender() {
+    /* 脚注：编号 + 双向跳转锚点 */
+    bindFootnotes();
+    bindFootnoteJump();
+    bindSpoilers();
     /* MathJax：渲染数学公式（库加载后或稍后 load 事件都会触发） */
     if (window.MathJax && MathJax.typesetPromise) {
       MathJax.typesetPromise([mdBody]).catch(function () {});
@@ -2273,7 +2508,15 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     trashWarn: '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/><path d="M12 1.5v2"/></svg>'
   };
   var btnTheme = $('#btnTheme');
-  function setTheme(t) {
+  var themeAnimTimer = null;
+  /* animate=false 用于首屏：避免刚打开就先演一遍过渡 */
+  function setTheme(t, animate) {
+    if (animate !== false && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      html.classList.add('theme-anim');
+      void html.offsetWidth; /* 先让过渡规则落到样式上，紧接着改主题才会真的「过渡」而不是瞬切 */
+      if (themeAnimTimer) clearTimeout(themeAnimTimer);
+      themeAnimTimer = setTimeout(function () { html.classList.remove('theme-anim'); }, 420);
+    }
     html.dataset.theme = t;
     try { localStorage.setItem('md-theme', t); } catch (e) {}
     btnTheme.querySelector('.mi-icon').innerHTML = t === 'dark' ? ICONS.sun : ICONS.moon;
@@ -2281,7 +2524,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     btnTheme.title = t === 'dark' ? '切换到亮色主题' : '切换到暗色主题';
     if (typeof applyMdTheme === 'function') applyMdTheme();
   }
-  setTheme(html.dataset.theme || 'dark');
+  setTheme(html.dataset.theme || 'dark', false);
 
   var btnFont = $('#btnFont');
   function setFont(f) {

@@ -11,7 +11,7 @@ const path = require('path');
 
 const dir = process.argv[2] || __dirname;
 const src = path.join(dir, 'index.html');
-const out = path.join(dir, '墨阅解析.html'); /* 与 README / 发布产物同名，构建后无需手动改名 */
+const out = path.join(dir, 'InkMark.html'); /* 与 README「项目结构」/ releases 里的产物同名，构建后无需手动改名 */
 
 let html = fs.readFileSync(src, 'utf8');
 

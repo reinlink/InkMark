@@ -21,7 +21,17 @@
 <!-- MathJax 配置：仅按需渲染（$…$ 行内 / $$…$$ 块级），不自动扫描全文档 -->
 <script>
 window.MathJax = {
-  tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+  tex: {
+    inlineMath: [['$', '$']], displayMath: [['$$', '$$']],
+    /* 标准 LaTeX 里这些大写希腊字母与拉丁字母同形，因此没有定义（写了会标红），
+       这里按本名补上宏，写成 \Kappa 之类也能正常渲染 */
+    macros: {
+      Alpha: '\\mathrm{A}', Beta: '\\mathrm{B}', Epsilon: '\\mathrm{E}', Zeta: '\\mathrm{Z}',
+      Eta: '\\mathrm{H}', Iota: '\\mathrm{I}', Kappa: '\\mathrm{K}', Mu: '\\mathrm{M}',
+      Nu: '\\mathrm{N}', Omicron: '\\mathrm{O}', Rho: '\\mathrm{P}', Tau: '\\mathrm{T}',
+      Chi: '\\mathrm{X}'
+    }
+  },
   options: { enableMenu: false, ignoreHtmlClass: 'tex2jax_ignore' },
   startup: { typeset: false }
 };
@@ -67,7 +77,13 @@ window.MathJax = {
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45), 0 14px 40px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.5), 0 32px 80px rgba(0, 0, 0, 0.45);
   --overlay: rgba(5, 5, 12, 0.55);
-  --t-kw: #c792ea; --t-str: #9ece6a; --t-com: #5f6472; --t-num: #f78c6c; --t-fn: #82aaff;
+  /* 代码高亮配色（对齐「目标样式.png」） */
+  --t-kw: #e0af80; --t-lit: #e8b2f3; --t-fn: #be9de2; --t-var: #7eb8e5;
+  --t-str: #a0cc79; --t-num: #e3d27d; --t-com: #bf6b60; --t-tag: #82cacc; --t-attr: #e3d27d;
+  --t-add: #a0cc79; --t-del: #bf6b60;
+  --t-plain: #f9fafb;
+  --hr-line: rgba(255, 255, 255, 0.34);
+  --code-block-bg: #1b1b1c; --code-bar-bg: #2c2c2e; --code-block-border: rgba(255,255,255,0.06);
 }
 [data-theme="light"] {
   --bg: #f2f2f5;
@@ -93,11 +109,20 @@ window.MathJax = {
   --shadow-md: 0 6px 20px rgba(20, 20, 40, 0.08), 0 14px 40px rgba(20, 20, 40, 0.09);
   --shadow-lg: 0 10px 32px rgba(20, 20, 40, 0.10), 0 32px 80px rgba(20, 20, 40, 0.12);
   --overlay: rgba(10, 10, 24, 0.45);
-  --t-kw: #9d3dcf; --t-str: #4e9a3a; --t-com: #8b8b9a; --t-num: #d9730d; --t-fn: #2f6fbf;
+  /* 代码高亮配色（亮色下用同色系的深色版） */
+  --t-kw: #a15c00; --t-lit: #9b2fa8; --t-fn: #6d3fc4; --t-var: #1668b3;
+  --t-str: #3d7a1f; --t-num: #8a6400; --t-com: #a8463a; --t-tag: #0b7285; --t-attr: #8a6400;
+  --t-add: #3d7a1f; --t-del: #a8463a;
+  --t-plain: #24242c;
+  --hr-line: rgba(20, 20, 40, 0.30);
+  --code-block-bg: #f7f7f9; --code-bar-bg: #ececf0; --code-block-border: rgba(20,20,40,0.10);
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-/* 主题切换过渡：只在切换瞬间由 JS 给 <html> 加 .theme-anim（常驻会拖慢滚动与交互） */
+/* 主题切换过渡：只在切换瞬间由 JS 给 <html> 加 .theme-anim（常驻会拖慢滚动与交互）。
+ * 这是「老路子」= 给每个元素挂 transition，元素一多就掉帧；新版浏览器走 View Transition（见 setTheme）。
+ * 即便如此，也把最重的两棵子树排除掉：代码块里的 token span 动辄上千个、mermaid 是整张 SVG，
+ * 让它们直接换色，别参与逐元素过渡。 */
 @media (prefers-reduced-motion: no-preference) {
   html.theme-anim,
   html.theme-anim *,
@@ -107,6 +132,17 @@ html { scroll-behavior: smooth; }
                 fill .34s ease, stroke .34s ease, box-shadow .34s ease !important;
     transition-delay: 0s !important;
   }
+  html.theme-anim .code-block *,
+  html.theme-anim .mermaid *,
+  html.theme-anim pre * {
+    transition: none !important;
+  }
+}
+/* View Transition 路子的淡入淡出时长（默认 250ms，这里跟老路子的 .34s 对齐） */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: .34s;
+  animation-timing-function: ease;
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
@@ -311,7 +347,9 @@ body.edit-mode main > .card { border-radius: 0; box-shadow: none; }
 .md-zoom-overlay .md-zoom-box { margin: auto; cursor: default; }
 .md-zoom-overlay svg {
   display: block; max-width: calc(100vw - 56px); max-height: 88vh;
-  background: #fff; border-radius: 12px; box-shadow: var(--shadow-lg);
+  /* 必须用不透明的主题底色：--surface-1 是 3% 透明色，叠在 82% 的暗色遮罩上会变暗，
+     亮色主题里 mermaid 烘死的深色连线（#333）就糊在深底上看不清了。 */
+  background: var(--card); border-radius: 12px; box-shadow: var(--shadow-lg);
 }
 .md-zoom-overlay .md-zoom-close {
   position: fixed; top: 14px; right: 14px; width: 38px; height: 38px;
@@ -429,23 +467,110 @@ body.edit-mode.edit-stacked #editorPane { order: 2; width: 100%; height: 50%; bo
   color: color-mix(in srgb, var(--accent) 78%, var(--text));
   white-space: pre-wrap; word-break: break-word;
 }
+/* ===== 代码块：原版深色卡片外观 + 右上角语言角标（悬停/点击弹出复制·下载） =====
+ * 说明：代码块亮暗主题都用深色底（沿用原版观感），所以 token 配色固定用深色那套，
+ *       在 pre 上就地覆盖 --t-* 变量，避免亮色主题下变成"深底 + 深字"。 */
+.markdown-body pre, .markdown-body .code-block {
+  --t-kw: #e0af80; --t-lit: #e8b2f3; --t-fn: #be9de2; --t-var: #7eb8e5;
+  --t-str: #a0cc79; --t-num: #e3d27d; --t-com: #bf6b60; --t-tag: #82cacc; --t-attr: #e3d27d;
+  --t-add: #a0cc79; --t-del: #bf6b60; --t-plain: #f9fafb;
+}
+.markdown-body .code-block { position: relative; margin: 1.25em 0; }
+.markdown-body .code-block > pre { margin: 0; }
 .markdown-body pre {
-  position: relative; margin: 1.25em 0; padding: 1.05em 1.2em;
+  position: relative; padding: 1.05em 1.2em;
   background: var(--code-bg); border: 1px solid var(--code-border);
   border-radius: 13px; overflow: auto; line-height: 1.65;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.03), var(--shadow-sm);
 }
-.markdown-body pre code { background: none; border: 0; padding: 0; color: #d8d8e4; font-size: .86em; white-space: pre; word-break: normal; }
-.markdown-body pre[data-lang]::after {
-  content: attr(data-lang); position: absolute; top: 9px; right: 13px;
-  font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
-  text-transform: uppercase; color: rgba(255,255,255,.32);
+.markdown-body pre code {
+  background: none; border: 0; padding: 0; color: var(--t-plain); font-size: .86em;
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; /* 长行软换行，不再需要横向滚动 */
 }
+/* 每个源码行是一个块（CSS 的 text-indent 只管块首行，所以必须由 highlight() 把每行包成 .cl）。
+   软换行续行的缩进 = 该行自己的行首缩进：--i 是 splitCodeLines 数出来的源码行前导列数，
+   行首缩 4 格续行就缩 4 格、行首不缩进续行也不缩（等价于编辑器 wrappingIndent:'same'）。 */
+.markdown-body pre code > .cl {
+  display: block;
+  padding-left: calc(var(--i, 0) * 1ch);
+  text-indent: calc(var(--i, 0) * -1ch);
+}
+.markdown-body pre code > .cl:empty::before { content: "\a0"; }
+/* 普通模式：保持原样——不软换行（长行横向滚动）、不做续行缩进。
+   给 ASCII 流程图 / 管线图这类「排版即内容」的块用（不带语言名或语言名为 text 的块默认走这里）。
+   code 必须是 inline-block + min-width:100%：这样它会被最长行撑成一个真盒子，滚动区的右边界
+   就能算上 pre 自己的 padding-right——否则溢出的是「行内文本」，右内边距被吞掉，
+   滚到最右时长行会顶在卡片边框上（左侧却有 1.2em 空隙）。 */
+.markdown-body .code-block[data-mode="plain"] pre code {
+  display: inline-block; min-width: 100%; box-sizing: border-box;
+  white-space: pre; overflow-wrap: normal; word-break: normal;
+}
+.markdown-body .code-block[data-mode="plain"] pre code > .cl {
+  padding-left: 0; text-indent: 0;
+}
+/* 右上角工具区：语言角标（沿用原版角标样式）+ 悬停/点击弹出的按钮面板 */
+/* 代码块右上角的悬浮工具区。
+ * 注意层级：模式按钮必须放在 .code-tools 外面（.code-tools-bar 里），因为「复制 / 下载」面板
+ * 是挂在 .code-tools:hover 上的——模式按钮若在 .code-tools 内，鼠标一移到它上面就会弹出面板。 */
+.markdown-body .code-tools-bar {
+  position: absolute; top: 8px; right: 12px; z-index: 3;
+  display: flex; align-items: center; gap: 5px;
+}
+.markdown-body .code-tools {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-end;
+}
+/* 显示模式切换：普通模式（不换行、保持原样，给 ASCII 流程图/管线图用）/ 代码模式（自动换行 + 续行缩进） */
+.markdown-body .code-mode {
+  padding: 1px 7px; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.17); background: none;
+  font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  line-height: 1.5; white-space: nowrap;
+  color: rgba(255,255,255,.36);
+  transition: color .15s, background .15s, border-color .15s;
+}
+.markdown-body .code-mode:hover { color: rgba(255,255,255,.88); background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.30); }
+.markdown-body .code-block[data-mode="code"] .code-mode { color: rgba(255,255,255,.66); border-color: rgba(255,255,255,.28); }
+.markdown-body .code-lang {
+  padding: 2px 7px; border: 0; border-radius: 6px; background: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; line-height: 1.5;
+  color: rgba(255,255,255,.32);
+  transition: color .15s, background .15s;
+}
+.markdown-body .code-lang:hover,
+.markdown-body .code-tools.open .code-lang { color: rgba(255,255,255,.78); background: rgba(255,255,255,.08); }
+.markdown-body .code-acts {
+  position: absolute; top: calc(100% + 5px); right: 0;
+  display: flex; align-items: center; gap: 2px; padding: 3px;
+  background: var(--panel-strong); border: 1px solid var(--border-strong);
+  border-radius: 10px; box-shadow: var(--shadow-md);
+  opacity: 0; visibility: hidden; transform: translateY(-4px);
+  transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+}
+.markdown-body .code-tools:hover .code-acts,
+.markdown-body .code-tools.open .code-acts { opacity: 1; visibility: visible; transform: none; }
+.markdown-body .code-act {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 3px 8px; border: 0; border-radius: 7px; background: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 11.5px; color: var(--text-2);
+  transition: background .15s, color .15s;
+}
+.markdown-body .code-act svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.markdown-body .code-act:hover { background: var(--surface-2); color: var(--text-strong); }
+.markdown-body .code-act.done { color: var(--t-str); }
+/* 高亮 token 配色 */
 .markdown-body pre .t-kw { color: var(--t-kw); }
-.markdown-body pre .t-str { color: var(--t-str); }
-.markdown-body pre .t-com { color: var(--t-com); font-style: italic; }
-.markdown-body pre .t-num { color: var(--t-num); }
+.markdown-body pre .t-lit { color: var(--t-lit); }
 .markdown-body pre .t-fn { color: var(--t-fn); }
+.markdown-body pre .t-var { color: var(--t-var); }
+.markdown-body pre .t-str { color: var(--t-str); }
+.markdown-body pre .t-num { color: var(--t-num); }
+.markdown-body pre .t-com { color: var(--t-com); font-style: italic; }
+.markdown-body pre .t-tag { color: var(--t-tag); }
+.markdown-body pre .t-attr { color: var(--t-attr); }
+.markdown-body pre .t-add { color: var(--t-add); }
+.markdown-body pre .t-del { color: var(--t-del); }
 .markdown-body blockquote {
   margin: 1.25em 0; padding: .55em 1.25em .55em 1.15em;
   border-left: 3px solid var(--accent); border-radius: 0 12px 12px 0;
@@ -481,20 +606,23 @@ body.edit-mode.edit-stacked #editorPane { order: 2; width: 100%; height: 50%; bo
 .markdown-body thead th { background: var(--surface-2); font-weight: 650; color: var(--text-strong); font-family: var(--font-ui); font-size: .95em; }
 .markdown-body tbody tr:nth-child(even) td { background: var(--surface-1); }
 .markdown-body img { display: block; max-width: 100%; height: auto; margin: 1.2em auto; border-radius: 12px; box-shadow: var(--shadow-sm); }
-/* 独占一段的图（logo / 徽标）给个下限：不少 SVG 图标自带 width="1em"，按原尺寸只有 16px 太小 */
-.markdown-body p > img:only-child,
-.markdown-body p > a:only-child > img:only-child { min-width: min(3em, 100%); }
+/* 独占一段 / 独占一个列表项的图（logo / 徽标）给个下限：不少 SVG 图标自带 width="1em"，按原尺寸只有 16px 太小 */
+.markdown-body :is(p, li) > img:only-child,
+.markdown-body :is(p, li) > a:only-child > img:only-child { min-width: min(3em, 100%); }
 .markdown-body hr {
-  border: 0; height: 1px; width: 58%; margin: 2.2em auto;
-  background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+  border: 0; height: 1px; width: 62%; margin: 2.2em auto;
+  /* 中间主色更实、两侧渐弱放缓（--hr-line 在主题里给亮色/暗色两套） */
+  background: linear-gradient(90deg, transparent, var(--hr-line) 18%, var(--hr-line) 82%, transparent);
 }
 /* ===== 数学公式 ===== */
 .markdown-body .math-inline { white-space: nowrap; }
 .markdown-body .math-block {
-  margin: 1.2em auto; overflow-x: auto; text-align: center;
-  padding: .4em 0;
+  margin: 1.2em auto; text-align: center;
+  padding: .4em 0; overflow-x: visible;
 }
-.markdown-body mjx-container { overflow-x: auto; }
+.markdown-body mjx-container { overflow-x: visible; }
+/* 公式过宽时整体等比缩放到容器内（MathJax 的 SVG 带 viewBox，缩了不变形），不再出滚动条 */
+.markdown-body .math-block mjx-container > svg { max-width: 100%; height: auto; }
 /* ===== Mermaid 图 ===== */
 .markdown-body .mermaid {
   margin: 1.2em 0; padding: 1em 1.2em;
@@ -522,22 +650,33 @@ body.edit-mode.edit-stacked #editorPane { order: 2; width: 100%; height: 50%; bo
   border-bottom: 0; font-size: .95em; white-space: nowrap;
 }
 .markdown-body .footnote-back:hover { text-decoration: underline; }
-/* 跳转落点高亮（脚注条目 / 正文引用上标 / 标题锚点） */
+/* 跳转落点高亮（脚注条目 / 正文引用上标 / 标题锚点）
+ * 过渡必须写在「未高亮」的基础样式上，这样类名移除时才会淡出（写在 .fn-flash 里只会淡入）；
+ * 圆角也必须写在基础样式上——只写在高亮态里的话，类名一移除圆角立刻消失，
+ * 底色还在慢慢淡出，于是看到「圆角突然变直角」。外扩范围一律用 box-shadow 光圈，不用 padding，
+ * 免得高亮时版面跳动。 */
+.markdown-body .footnotes li,
+.markdown-body .footnote-ref a,
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  transition: background-color .55s ease, box-shadow .55s ease, color .55s ease;
+}
+.markdown-body .footnotes li { border-radius: 6px; }
+.markdown-body .footnote-ref a { border-radius: 4px; }
+.markdown-body :is(h1, h2, h3, h4, h5, h6) { border-radius: 8px; }
 .markdown-body .footnotes li:target,
 .markdown-body .footnotes li.fn-flash {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-radius: 6px; padding: .1em .4em;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  box-shadow: 0 0 0 .35em color-mix(in srgb, var(--accent) 32%, transparent);
 }
 .markdown-body .footnote-ref:target a,
 .markdown-body .footnote-ref.fn-flash a {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: 4px; padding: 0 .2em;
+  background: color-mix(in srgb, var(--accent) 42%, transparent);
+  box-shadow: 0 0 0 .18em color-mix(in srgb, var(--accent) 42%, transparent);
 }
 /* 标题锚点落点：只画底色 + 外扩光圈，不加内边距，避免高亮时版面跳动 */
 .markdown-body :is(h1, h2, h3, h4, h5, h6).fn-flash {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-radius: 8px;
-  box-shadow: 0 0 0 .35em color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: 0 0 0 .4em color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 /* ===== 隐藏内容遮罩（||spoiler||，Discord 同款：黑条遮住，点击显示） ===== */
@@ -551,6 +690,21 @@ body.edit-mode.edit-stacked #editorPane { order: 2; width: 100%; height: 50%; bo
 }
 .markdown-body .spoiler:hover { background: color-mix(in srgb, var(--text) 34%, transparent); }
 .markdown-body .spoiler:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 未显示时把里面**所有**元素一并压成透明：粗体、行内代码、链接等自带 color/背景，
+   否则它们会从遮罩里透出来（现象：遮罩看着半透明，只有普通文字被遮住） */
+.markdown-body .spoiler:not(.revealed) *,
+.markdown-body .spoiler:not(.revealed) *::before,
+.markdown-body .spoiler:not(.revealed) *::after {
+  color: transparent !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  -webkit-text-fill-color: transparent !important;
+}
+/* 图片 / 矢量图没法用颜色遮，模糊掉 */
+.markdown-body .spoiler:not(.revealed) img,
+.markdown-body .spoiler:not(.revealed) svg { filter: blur(7px); }
 .markdown-body .spoiler.revealed {
   background: color-mix(in srgb, var(--accent) 13%, transparent);
   color: inherit; cursor: text;
@@ -747,6 +901,14 @@ body.side-open #sidebar { transform: none; box-shadow: -24px 0 60px rgba(0,0,0,.
           <span class="mi-icon"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></svg></span>
           <span class="mi-text">新建临时文档</span>
         </button>
+        <button class="more-item" id="btnImportFile" title="导入一份或多份 Markdown 文档（追加到文件列表）">
+          <span class="mi-icon"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9.6 14.6L12 17l2.4-2.4"/></svg></span>
+          <span class="mi-text">导入新文档</span>
+        </button>
+        <button class="more-item" id="btnImportFolder" title="导入整个文件夹里的 Markdown（保留相对路径）">
+          <span class="mi-icon"><svg viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h3.6l1.8 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11.5v5M9.5 14h5"/></svg></span>
+          <span class="mi-text">导入新文件夹</span>
+        </button>
         <div class="more-sep"></div>
         <button class="more-item" id="btnFont" title="切换正文字体（衬线 / 黑体）">
           <span class="mi-icon"><svg viewBox="0 0 24 24"><path d="M4 20L9.5 5h5L20 20"/><path d="M6.8 15h10.4"/></svg></span>
@@ -860,6 +1022,8 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
 (function () {
   var $ = function (s) { return document.querySelector(s); };
   var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  /* 属性值专用：在 esc 基础上把双引号也转义（URL / alt / title / id 里的引号不会截断属性） */
+  var attrEsc = function (s) { return esc(s).replace(/"/g, '&quot;'); };
   var html = document.documentElement;
 
   /* ================================================================
@@ -1017,11 +1181,20 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     return blocks;
   }
 
+  /* 表格行拆格：支持 \| 转义竖线（单元格里想写 | 就写 \|，不会被当成列分隔） */
   function splitRow(r) {
     var s = r.trim();
     if (s.charAt(0) === '|') s = s.slice(1);
-    if (s.slice(-1) === '|') s = s.slice(0, -1);
-    return s.split('|').map(function (c) { return c.trim(); });
+    if (s.slice(-1) === '|' && s.charAt(s.length - 2) !== '\\') s = s.slice(0, -1);
+    var cells = [], cur = '', i = 0;
+    while (i < s.length) {
+      var ch = s[i];
+      if (ch === '\\' && s[i + 1] === '|') { cur += '|'; i += 2; continue; }
+      if (ch === '|') { cells.push(cur); cur = ''; i++; continue; }
+      cur += ch; i++;
+    }
+    cells.push(cur);
+    return cells.map(function (c) { return c.trim(); });
   }
 
   /* 列表区域解析：返回 { items, loose } */
@@ -1083,6 +1256,51 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     return null;
   }
 
+  /* 还原行内解析第 2 步为 URL/标题做的 HTML 转义（转义过再拼进属性才不会双重转义，如 ?a=1&b=2） */
+  function unescDest(s) {
+    return String(s == null ? '' : s)
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+  /* 解析链接 / 图片的目标与标题：
+   * 1) 尖括号写法 [x](<带 空格的目标> "标题") —— CommonMark 规定，目标里可以有空格；
+   *    （行内解析到这一步时 < > 已被转义成 &lt; &gt;，两种形态都认）
+   * 2) 末尾是带引号（或括号）的才当标题，否则整段都算目标 ——
+   *    这样 [x](#2.1 启动 / 停止) 与 ![图](图片 名.png) 这类中文/带空格的常见写法不用转义也能用 */
+  function parseDest(inner) {
+    var dest = String(inner == null ? '' : inner).trim();
+    var am = /^(?:<|&lt;)([\s\S]*?)(?:>|&gt;)/.exec(dest);
+    if (am) {
+      return {
+        url: unescDest(am[1]).replace(/\\</g, '<').replace(/\\>/g, '>'),
+        title: unescDest(titleOf(dest.slice(am[0].length)))
+      };
+    }
+    var m = /^(.*?)\s+("[^"]*"|'[^']*'|\([^()]*\))$/.exec(dest);
+    if (m) return { url: unescDest(m[1]), title: unescDest(titleOf(m[2])) };
+    return { url: unescDest(dest), title: '' };
+  }
+  function titleOf(s) {
+    var t = String(s || '').trim();
+    if (t.length >= 2) {
+      var a = t.charAt(0), b = t.charAt(t.length - 1);
+      if ((a === '"' && b === '"') || (a === "'" && b === "'") || (a === '(' && b === ')')) return t.slice(1, -1);
+    }
+    return '';
+  }
+
+  /* 把字符串里的占位符就地还原（URL / 标题 / alt 要在拼进属性前还原，否则还原出的 " < > 会突破属性边界） */
+  function resolvePh(s, ph) {
+    var t = String(s == null ? '' : s);
+    for (var g = 0; g < 10; g++) {
+      var next = t.replace(/\u0000(\d+)\u0000/g, function (m, i) { return ph[+i] != null ? ph[+i] : ''; });
+      if (next === t) break;
+      t = next;
+    }
+    return t;
+  }
+
   /* 扫描 ![alt](url) 与 [text](url)；URL 支持成对括号与可选 title；命中处用占位符保护。
    * 分两阶段：先图片后链接，使 [![alt](img)](url) 这类"链接内嵌图片"能正确解析。
    * ph 为外层共享的占位符数组：链接文字 / 隐藏内容里再解析出的占位符也用同一份索引，避免索引串号丢内容 */
@@ -1097,15 +1315,11 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
         if (cl > -1 && s[cl + 1] === '(') {
           var d = matchDest(s, cl + 1);
           if (d) {
-            var alt = s.slice(ts, cl);
-            var dest = d.inner.trim();
-            var url = dest, title = '';
-            var ws = dest.search(/\s/);
-            if (ws > -1) {
-              url = dest.slice(0, ws);
-              title = dest.slice(ws).trim().replace(/^["']|["']$/g, '');
-            }
-            out1 += push('<img src="' + esc(safeUrl(url, true)) + '" alt="' + (alt || '') + '"' + (title ? ' title="' + esc(title) + '"' : '') + ' loading="lazy">');
+            /* alt 是纯文本：还原占位符后去掉标签（alt 里不该出现 HTML） */
+            var alt = resolvePh(s.slice(ts, cl), ph).replace(/<[^>]*>/g, '');
+            var pd = parseDest(d.inner);
+            var url = resolvePh(pd.url, ph), title = resolvePh(pd.title, ph);
+            out1 += push('<img src="' + attrEsc(safeUrl(url, true)) + '" alt="' + attrEsc(alt) + '"' + (title ? ' title="' + attrEsc(title) + '"' : '') + ' loading="lazy">');
             i = d.end;
             continue;
           }
@@ -1126,16 +1340,11 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
           var d2 = matchDest(out1, cl2 + 1);
           if (d2) {
             var text2 = out1.slice(ts2, cl2);
-            var dest2 = d2.inner.trim();
-            var url2 = dest2, title2 = '';
-            var ws2 = dest2.search(/\s/);
-            if (ws2 > -1) {
-              url2 = dest2.slice(0, ws2);
-              title2 = dest2.slice(ws2).trim().replace(/^["']|["']$/g, '');
-            }
+            var pd2 = parseDest(d2.inner);
+            var url2 = resolvePh(pd2.url, ph), title2 = resolvePh(pd2.title, ph);
             var inner = inline(text2, { noLinks: true, escaped: true, noRestore: true, _ph: ph });
             var ext = /^https?:/i.test(url2);
-            out2 += push('<a href="' + esc(safeUrl(url2)) + '"' + (ext ? ' target="_blank" rel="noopener noreferrer"' : '') + (title2 ? ' title="' + esc(title2) + '"' : '') + '>' + inner + '</a>');
+            out2 += push('<a href="' + attrEsc(safeUrl(url2)) + '"' + (ext ? ' target="_blank" rel="noopener noreferrer"' : '') + (title2 ? ' title="' + attrEsc(title2) + '"' : '') + '>' + inner + '</a>');
             i2 = d2.end;
             continue;
           }
@@ -1154,12 +1363,13 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     var s = String(src);
     var push = function (htmlStr) { ph.push(htmlStr); return '\u0000' + (ph.length - 1) + '\u0000'; };
 
-    /* 1. 尖括号自动链接（在转义之前识别） */
-    s = s.replace(/<(https?:\/\/[^>\s]+|mailto:[^>\s]+|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)>/g, function (m, u) {
+    /* 1. 尖括号自动链接（在转义之前识别）；紧跟 "](（可含空格）" 的是链接/图片目标 <...>，留给第 5 步解析 */
+    s = s.replace(/<(https?:\/\/[^>\s]+|mailto:[^>\s]+|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)>/g, function (m, u, off, str) {
+      if (/\]\(\s*$/.test(str.slice(0, off))) return m;
       var href;
       if (/^https?:/i.test(u)) href = u;
       else href = u.indexOf('mailto:') === 0 ? u : 'mailto:' + u;
-      return push('<a href="' + esc(safeUrl(href)) + '" target="_blank" rel="noopener noreferrer">' + esc(u) + '</a>');
+      return push('<a href="' + attrEsc(safeUrl(href)) + '" target="_blank" rel="noopener noreferrer">' + esc(u) + '</a>');
     });
 
     /* 2. HTML 转义 */
@@ -1168,22 +1378,23 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     /* 2.5 换行：行尾两个空格=硬换行；普通换行（软换行）同样保留为可见换行，
      *     否则多行文本会被 HTML 折叠成一行。硬换行先用哨兵占位，最后与软换行合并成同一个 <br> */
     s = s.replace(/ {2,}\n/g, '\u0000BR\u0000\n');
+    s = s.replace(/\\\n/g, '\u0000BR\u0000\n'); /* 行尾反斜杠也是硬换行（CommonMark），顺手把反斜杠本身去掉 */
     s = s.replace(/\n/g, '<br>\n');
     s = s.replace(/\u0000BR\u0000/g, '');
 
     /* 3. 行内代码 */
-    s = s.replace(/(`+)([^`\n]*?)\1/g, function (m, t, inner) {
+    s = s.replace(/(?<!`)(`+)(?!`)([^\n]*?)\1(?!`)/g, function (m, t, inner) {
       return push('<code>' + inner + '</code>');
     });
 
-    /* 3.5 行内数学 $...$（保留原文，渲染后由 MathJax 处理；\$ 转义不触发） */
-    s = s.replace(/(?<!\\)\$([^$\n]+?)\$(?!\$)/g, function (m, tex) {
+    /* 3.5 行内数学 $...$（保留原文，渲染后由 MathJax 处理；两侧 \$ 都不触发，便于写价格等字面美元） */
+    s = s.replace(/(?<!\\)\$([^$\n]+?)(?<!\\)\$(?!\$)/g, function (m, tex) {
       return push('<span class="math-inline">$' + tex + '$</span>');
     });
 
     /* 3.6 脚注引用 [^id] → 上标（编号在渲染后填充） */
     s = s.replace(/\[\^([^\]]+)\]/g, function (m, id) {
-      return push('<sup class="footnote-ref" data-fn="' + esc(id) + '"><a href="#fn-' + esc(id) + '">[?]</a></sup>');
+      return push('<sup class="footnote-ref" data-fn="' + attrEsc(id) + '"><a href="#fn-' + attrEsc(id) + '">[?]</a></sup>');
     });
 
     /* 3.7 隐藏内容 ||spoiler|| → 遮罩（Discord 同款，点击显示）。放在行内代码/公式之后，
@@ -1193,9 +1404,11 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
         inline(inner, { noLinks: opts.noLinks, escaped: true, noRestore: true, _ph: ph }) + '</span>');
     });
 
-    /* 4. 反斜杠转义（转义结果用占位符保护，不再参与后续解析，如 \* 显示为字面 *） */
-    s = s.replace(/\\([\\`*_{}\[\]()#+\-.!|>~])/g, function (m, ch) {
-      return push(esc(ch));
+    /* 4. 反斜杠转义（结果用占位符保护，不再参与后续解析，如 \* 显示为字面 *）；
+     *    < > & 在第 2 步已被转成实体，这里连实体一起认，于是 \< \> \& \$ 也能当转义用 */
+    s = s.replace(/\\(&lt;|&gt;|&amp;|[\\`*_{}\[\]()#+\-.!|>~"$'])/g, function (m, ch) {
+      var un = ch === '&lt;' ? '<' : ch === '&gt;' ? '>' : ch === '&amp;' ? '&' : ch;
+      return push(esc(un));
     });
 
     /* 5. 图片与链接（手工扫描：URL 支持成对括号，如 data URI / Wikipedia 链接） */
@@ -1204,7 +1417,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     /* 6. 裸链接自动识别 */
     if (!opts.noLinks) {
       s = s.replace(/(^|[\s(])(https?:\/\/[^\s<]*[^\s<.,;:!?)\]"'*_])/g, function (m, pre, url) {
-        return pre + push('<a href="' + esc(safeUrl(url)) + '" target="_blank" rel="noopener noreferrer">' + url + '</a>');
+        return pre + push('<a href="' + attrEsc(safeUrl(unescDest(url))) + '" target="_blank" rel="noopener noreferrer">' + url + '</a>');
       });
     }
 
@@ -1243,53 +1456,301 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   }
 
   /* ---------- 代码语法高亮（轻量） ---------- */
+  /* ============ 代码高亮（逐语言轻量词法） ============
+   * 输出的 span 类名 → CSS 变量（暗色配色对齐「目标样式.png」）：
+   *   t-kw  关键字        --t-kw   (#e0af80 蜜橙)
+   *   t-lit 内置/常量     --t-lit  (#e8b2f3 粉紫)
+   *   t-fn  函数名        --t-fn   (#be9de2 紫)
+   *   t-var 变量/属性/参数/键 --t-var (#7eb8e5 浅蓝)
+   *   t-str 字符串        --t-str  (#a0cc79 绿)
+   *   t-num 数字          --t-num  (#e3d27d 黄)
+   *   t-com 注释          --t-com  (#bf6b60 暗红)
+   *   t-tag 标签名        --t-tag  (#82cacc 青)
+   *   t-attr 属性名       --t-attr (#e3d27d 黄)
+   *   t-add/t-del  diff 增删行
+   * 注意：传进来的是**原始代码**（未转义），普通文本由这里负责 esc。 */
   var LANGS = {
-    js: { k: 'const let var function return if else for while new class extends import export from default async await try catch finally throw typeof instanceof this null undefined true false switch case break continue do of in yield static get set void delete', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    jsx: { k: 'const let var function return if else for while new class extends import export from default async await try catch finally throw typeof instanceof this null undefined true false switch case break continue do of in yield static get set void delete', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    ts: { k: 'const let var function return if else for while new class extends import export from default async await try catch finally throw typeof instanceof this null undefined true false switch case break continue do of in yield static get set void delete interface type enum namespace declare readonly public private protected implements', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    python: { k: 'def return if elif else for while import from class try except finally with as lambda not and or in is None True False pass raise yield global nonlocal async await self del assert', c: /#[^\n]*/ },
-    py: { k: 'def return if elif else for while import from class try except finally with as lambda not and or in is None True False pass raise yield global nonlocal async await self del assert', c: /#[^\n]*/ },
-    json: { k: 'true false null', c: /\/\/[^\n]*/ },
-    css: { k: '', c: /\/\*[\s\S]*?\*\// },
-    html: { k: '', c: /<!--[\s\S]*?-->/ },
-    xml: { k: '', c: /<!--[\s\S]*?-->/ },
-    markdown: { k: '', c: /<!--[\s\S]*?-->/ },
-    bash: { k: 'if then else elif fi for do done while case esac function echo export cd sudo apt apt-get yum pip pip3 npm npx pnpm git docker curl wget grep sed awk cat ls mkdir rm cp mv chmod chown source local return exit', c: /#[^\n]*/ },
-    sh: { k: 'if then else elif fi for do done while case esac function echo export cd sudo apt apt-get yum pip pip3 npm npx pnpm git docker curl wget grep sed awk cat ls mkdir rm cp mv chmod chown source local return exit', c: /#[^\n]*/ },
-    shell: { k: 'if then else elif fi for do done while case esac function echo export cd sudo apt apt-get yum pip pip3 npm npx pnpm git docker curl wget grep sed awk cat ls mkdir rm cp mv chmod chown source local return exit', c: /#[^\n]*/ },
-    sql: { k: 'SELECT FROM WHERE INSERT INTO UPDATE DELETE CREATE TABLE ALTER DROP JOIN INNER LEFT RIGHT FULL ON GROUP BY ORDER LIMIT OFFSET VALUES SET AND OR NOT NULL PRIMARY KEY FOREIGN INDEX UNIQUE AS DISTINCT COUNT SUM AVG MIN MAX HAVING UNION CASE WHEN THEN ELSE END BETWEEN LIKE IN EXISTS', c: /--[^\n]*|\/\*[\s\S]*?\*\// },
-    java: { k: 'public private protected static final class interface extends implements new return if else for while do switch case break continue try catch finally throw throws import package void int long double float boolean char String null true false this super instanceof', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    c: { k: 'int char void return if else for while struct union enum typedef static const extern unsigned signed long short float double null true false break continue switch case default sizeof', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    cpp: { k: 'int char void return if else for while struct union enum typedef static const extern unsigned signed long short float double null true false break continue switch case default sizeof namespace template class public private protected virtual override using std string vector map auto nullptr', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    go: { k: 'package import func return if else for range switch case default go defer chan struct interface map string int float64 bool nil true false var const type select break continue fallthrough', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    rust: { k: 'fn let mut pub struct enum impl trait use mod crate return if else for while loop match ref move async await dyn where self Self true false Option Result Some None Vec String', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// },
-    yaml: { k: 'true false null yes no on off', c: /#[^\n]*/ },
-    toml: { k: 'true false', c: /#[^\n]*/ },
-    ini: { k: '', c: /[#;][^\n]*/ },
-    diff: { k: '', c: /^\+\+\+|^---/m },
-    default: { k: '', c: /\/\/[^\n]*|\/\*[\s\S]*?\*\// }
+    js: { k: 'const let var function return if else for while new class extends import export from default async await try catch finally throw typeof instanceof this null undefined true false switch case break continue do of in yield static get set void delete', lit: '', c: 'c' },
+    jsx: { k: 'const let var function return if else for while new class extends import export from default async await try catch finally throw typeof instanceof this null undefined true false switch case break continue do of in yield static get set void delete', lit: '', c: 'c' },
+    ts: { k: 'const let var function return if else for while new class extends implements interface type enum namespace declare import export from default async await try catch finally throw typeof instanceof this null undefined true false switch case break continue do of in yield static get set void delete readonly public private protected abstract as satisfies keyof infer never unknown any string number boolean object symbol bigint', lit: '', c: 'c' },
+    python: { k: 'def return if elif else for while import from class try except finally with as lambda not and or in is None True False pass raise yield global nonlocal async await del assert match case print', lit: 'len range str int float list dict set tuple bool open type isinstance enumerate zip map filter sum min max abs sorted reversed input super self cls format repr next iter', c: 'hash' },
+    py: { k: 'def return if elif else for while import from class try except finally with as lambda not and or in is None True False pass raise yield global nonlocal async await del assert match case print', lit: 'len range str int float list dict set tuple bool open type isinstance enumerate zip map filter sum min max abs sorted reversed input super self cls format repr next iter', c: 'hash' },
+    json: { k: 'true false null', lit: '', c: 'c' },
+    css: { k: '', lit: '', c: 'css' },
+    html: { k: '', lit: '', c: 'html' },
+    xml: { k: '', lit: '', c: 'html' },
+    markdown: { k: '', lit: '', c: 'html' },
+    bash: { k: 'if then else elif fi for do done while until case esac function in select time', lit: 'echo cd set export source alias read printf test exit return local declare unset shift eval exec trap wait let umask sudo apt apt-get yum dnf pip pip3 npm npx pnpm yarn git docker curl wget grep sed awk cut sort uniq head tail cat ls mkdir rm cp mv chmod chown tar zip unzip ps kill sleep', c: 'hash' },
+    sh: { k: 'if then else elif fi for do done while until case esac function in select time', lit: 'echo cd set export source alias read printf test exit return local declare unset shift eval exec trap wait let umask sudo apt apt-get yum dnf pip pip3 npm npx pnpm yarn git docker curl wget grep sed awk cut sort uniq head tail cat ls mkdir rm cp mv chmod chown tar zip unzip ps kill sleep', c: 'hash' },
+    shell: { k: 'if then else elif fi for do done while until case esac function in select time', lit: 'echo cd set export source alias read printf test exit return local declare unset shift eval exec trap wait let umask sudo apt apt-get yum dnf pip pip3 npm npx pnpm yarn git docker curl wget grep sed awk cut sort uniq head tail cat ls mkdir rm cp mv chmod chown tar zip unzip ps kill sleep', c: 'hash' },
+    sql: { k: 'SELECT FROM WHERE INSERT INTO UPDATE DELETE CREATE TABLE ALTER DROP JOIN INNER LEFT RIGHT FULL OUTER ON GROUP BY ORDER LIMIT OFFSET VALUES SET AND OR NOT NULL PRIMARY KEY FOREIGN INDEX UNIQUE AS DISTINCT COUNT SUM AVG MIN MAX HAVING UNION CASE WHEN THEN ELSE END BETWEEN LIKE IN EXISTS ASC DESC IS', lit: '', c: 'sql' },
+    java: { k: 'public private protected static final class interface extends implements new return if else for while do switch case break continue try catch finally throw throws import package void int long double float boolean char byte short String null true false this super instanceof abstract synchronized volatile transient native strictfp enum record var', lit: 'System Math Integer Double Long Float Boolean Character Object List Map ArrayList HashMap HashSet Arrays Collections String StringBuilder', c: 'c' },
+    c: { k: 'int char void return if else for while struct union enum typedef static const extern unsigned signed long short float double null true false break continue switch case default sizeof goto register volatile inline', lit: 'printf fprintf sprintf snprintf scanf malloc calloc realloc free memcpy memset strlen strcpy strcmp fopen fclose fread fwrite stdout stderr stdin NULL size_t', c: 'c' },
+    cpp: { k: 'int char void return if else for while struct union enum typedef static const extern unsigned signed long short float double null true false break continue switch case default sizeof namespace template class public private protected virtual override using auto nullptr new delete try catch throw operator friend inline explicit constexpr typename this mutable', lit: 'std cout cin endl string vector map set unordered_map pair make_pair printf malloc free size_t nullptr_t', c: 'c' },
+    go: { k: 'package import func return if else for range switch case default go defer chan struct interface map string int int64 float64 bool nil true false var const type select break continue fallthrough', lit: 'fmt println print len cap make new append copy delete panic recover error byte rune uint uint64 float32 complex64', c: 'c' },
+    rust: { k: 'fn let mut pub struct enum impl trait use mod crate return if else for while loop match ref move async await dyn where self Self true false Option Result Some None Vec String Box Rc Arc', lit: 'println print format vec panic assert assert_eq todo unreachable', c: 'c' },
+    yaml: { k: 'true false null yes no on off', lit: '', c: 'hash' },
+    toml: { k: 'true false', lit: '', c: 'hash' },
+    ini: { k: '', lit: '', c: 'ini' },
+    diff: { k: '', lit: '', c: 'diff' },
+    default: { k: '', lit: '', c: 'c' }
   };
 
-  function highlight(code, lang) {
-    var cfg = LANGS[lang.toLowerCase()] || LANGS.default;
-    var keys = cfg.k ? cfg.k.split(/\s+/).filter(Boolean) : [];
-    var re = new RegExp(
-      '("""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'|"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'|`(?:\\\\.|[^`\\\\])*`)' +
-      (cfg.c ? '(' + cfg.c.source + ')' : '()') +
-      (keys.length ? '(\\b(?:' + keys.join('|') + ')\\b)' : '()') +
-      '(\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)' +
-      '(\\b[A-Za-z_][A-Za-z0-9_]*(?=\\())',
-      'g'
-    );
-    return code.replace(re, function (m, str, com, kw, num, fn) {
-      if (str) return '<span class="t-str">' + str + '</span>';
-      if (com) return '<span class="t-com">' + com + '</span>';
-      if (kw) return '<span class="t-kw">' + kw + '</span>';
-      if (num) return '<span class="t-num">' + num + '</span>';
-      if (fn) return '<span class="t-fn">' + fn + '</span>';
-      return m;
+  /* 包一层 span（text 已是原始代码，需要转义） */
+  function hlSpan(cls, text) { return '<span class="t-' + cls + '">' + esc(text) + '</span>'; }
+  /* 逐行处理（diff 用） */
+  function hlLines(code, fn) {
+    return code.split('\n').map(fn).join('\n');
+  }
+
+  /* C 家族 / Python / Bash / SQL 等：扫描式词法 */
+  function hlGeneric(code, cfg, id) {
+    var out = '';
+    var i = 0, n = code.length;
+    var inParams = 0;       /* 正在函数参数括号内（>0 时标识符算参数） */
+    var py = (id === 'python' || id === 'py');
+    var shell = (id === 'bash' || id === 'sh' || id === 'shell');
+    while (i < n) {
+      var rest = code.slice(i);
+      var m;
+      /* C / C++ 预处理指令与系统头文件名（别把 JSX 的 <Tag> 也当成头文件） */
+      if (id === 'c' || id === 'cpp') {
+        m = rest.match(/^#[ \t]*[A-Za-z_]\w*/);
+        if (m) { out += hlSpan('kw', m[0]); i += m[0].length; continue; }
+        m = rest.match(/^[ \t]*<[^>\n]*>/);
+        if (m) {
+          var lead = m[0].match(/^[ \t]*/)[0];
+          out += esc(lead) + hlSpan('str', m[0].slice(lead.length));
+          i += m[0].length; continue;
+        }
+      }
+      /* JSX/TSX 标签 */
+      if (id === 'jsx') {
+        m = rest.match(/^<\/?[A-Za-z][\w.:-]*/);
+        if (m) { out += hlSpan('tag', m[0]); i += m[0].length; continue; }
+        m = rest.match(/^\/?>/);
+        if (m) { out += hlSpan('tag', m[0]); i += m[0].length; continue; }
+      }
+      /* 注释 */
+      if (cfg.c === 'hash') m = rest.match(/^#[^\n]*/);
+      else if (cfg.c === 'sql') m = rest.match(/^--[^\n]*/) || rest.match(/^\/\*[\s\S]*?\*\//);
+      else m = rest.match(/^\/\/[^\n]*/) || rest.match(/^\/\*[\s\S]*?\*\//);
+      if (m) { out += hlSpan('com', m[0]); i += m[0].length; continue; }
+      /* 字符串 */
+      m = rest.match(/^("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?|`(?:\\.|[^`\\])*`)/);
+      if (m) { out += hlSpan('str', m[0]); i += m[0].length; continue; }
+      /* shell 变量 */
+      if (shell) {
+        m = rest.match(/^\$\{[^}\n]*\}|^\$[A-Za-z_]\w*|^\$[0-9@*?#$!-]/);
+        if (m) { out += hlSpan('var', m[0]); i += m[0].length; continue; }
+      }
+      /* 数字 */
+      m = rest.match(/^\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?/);
+      if (m) { out += hlSpan('num', m[0]); i += m[0].length; continue; }
+      /* 标识符 */
+      m = rest.match(/^[A-Za-z_$][\w$]*/);
+      if (m) {
+        var w = m[0], after = code.slice(i + w.length);
+        var cls = '';
+        if ((' ' + cfg.k + ' ').indexOf(' ' + w + ' ') >= 0) cls = 'kw';
+        else if (/^\s*\(/.test(after)) cls = 'fn';                 /* 调用/定义（先于内置名，与目标样式一致） */
+        else if ((' ' + (cfg.lit || '') + ' ').indexOf(' ' + w + ' ') >= 0) cls = 'lit';
+        else if (inParams > 0) cls = 'var';
+        else if (/^[A-Z]/.test(w)) cls = 'var';
+        out += cls ? hlSpan(cls, w) : esc(w);
+        i += w.length; continue;
+      }
+      /* 标点：只跟踪括号深度（括号内的标识符按变量/参数上蓝色） */
+      var ch = code[i];
+      if (ch === '(') inParams++;
+      else if (ch === ')' && inParams > 0) inParams--;
+      out += esc(ch);
+      i++;
+    }
+    return out;
+  }
+
+  /* JSON：键蓝、字符串值绿、数字黄、true/false/null 粉 */
+  function hlJson(code) {
+    return code.replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|\b-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g,
+      function (m, str, colon, lit) {
+        if (str) return hlSpan(colon ? 'var' : 'str', str) + (colon || '');
+        if (lit) return hlSpan('lit', lit);
+        return hlSpan('num', m);
+      });
+  }
+
+  /* YAML / TOML / INI：键蓝、值绿/黄、注释暗红；[section] 在 toml 里是蓝、ini 里是蜜橙 */
+  function hlKeyValue(code, id) {
+    var ini = (id === 'ini');
+    return hlLines(code, function (line) {
+      var m = line.match(/^(\s*)([#;].*)$/);
+      if (m) return esc(m[1]) + hlSpan('com', m[2]);
+      m = line.match(/^(\s*)(\[[^\]\n]*\])(.*)$/);       /* toml/ini 的 section */
+      if (m) return esc(m[1]) + hlSpan(ini ? 'kw' : 'var', m[2]) + esc(m[3]);
+      m = line.match(/^(\s*)(-\s+)?([\w.$-]+)(\s*[:=]\s*)(.*)$/);
+      if (m) {
+        var tail = m[5], tt = tail.trim();
+        var tv = /^(true|false|null|yes|no|on|off)$/i.test(tt) ? hlSpan('num', tail)
+               : /^-?\d+(?:\.\d+)?$/.test(tt) ? hlSpan('num', tail)
+               : (/^["'].*["']$/.test(tt) || ini) ? hlSpan('str', tail)
+               : esc(tail);
+        return esc(m[1] + (m[2] || '')) + hlSpan('var', m[3]) + esc(m[4]) + tv;
+      }
+      return esc(line);
     });
   }
+
+  /* HTML / XML：标签青、属性名黄、属性值绿、注释暗红、文本原色 */
+  function hlTags(code) {
+    var out = '', i = 0, n = code.length, m;
+    while (i < n) {
+      var rest = code.slice(i);
+      m = rest.match(/^<!--[\s\S]*?-->/);
+      if (m) { out += hlSpan('com', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^<!\[CDATA\[[\s\S]*?\]\]>/);
+      if (m) { out += hlSpan('com', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^<!\s*[A-Za-z][^>]*>/);      /* <!DOCTYPE …> 按标签上色 */
+      if (m) { out += hlSpan('tag', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^<\/?[A-Za-z][\w:.-]*/);
+      if (m) { out += hlSpan('tag', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^\/?>/);
+      if (m) { out += hlSpan('tag', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^[A-Za-z_:][\w:.-]*(?=\s*=)/);
+      if (m) { out += hlSpan('attr', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^"[^"]*"|^'[^']*'/);
+      if (m) { out += hlSpan('str', m[0]); i += m[0].length; continue; }
+      out += esc(code[i]); i++;
+    }
+    return out;
+  }
+
+  /* CSS：选择器蜜橙、属性蓝、数值黄、注释暗红、字符串绿 */
+  function hlCss(code) {
+    var out = '', i = 0, n = code.length, m;
+    var inBlock = false;
+    while (i < n) {
+      var rest = code.slice(i);
+      m = rest.match(/^\/\*[\s\S]*?\*\//);
+      if (m) { out += hlSpan('com', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^"[^"\n]*"|^'[^'\n]*'/);
+      if (m) { out += hlSpan('str', m[0]); i += m[0].length; continue; }
+      if (!inBlock) {
+        m = rest.match(/^[^{}\n;]+/);
+        if (m) { out += hlSpan('kw', m[0]); i += m[0].length; continue; }
+      } else {
+        m = rest.match(/^[-\w]+(?=\s*:)/);
+        if (m) { out += hlSpan('var', m[0]); i += m[0].length; continue; }
+        m = rest.match(/^#[0-9a-fA-F]{3,8}\b/);
+        if (m) { out += hlSpan('num', m[0]); i += m[0].length; continue; }
+        m = rest.match(/^-?\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw|s|ms|fr|deg)?/);
+        if (m) { out += hlSpan('num', m[0]); i += m[0].length; continue; }
+        m = rest.match(/^[A-Za-z-]+(?=\s*[;,}\n]|\s*$)/);
+        if (m) { out += hlSpan('lit', m[0]); i += m[0].length; continue; }
+      }
+      if (code[i] === '{') { inBlock = true; out += esc('{'); i++; continue; }
+      if (code[i] === '}') { inBlock = false; out += esc('}'); i++; continue; }
+      out += esc(code[i]); i++;
+    }
+    return out;
+  }
+
+  /* Markdown：标题暗红、列表符蜜橙、强调/代码/链接特殊处理 */
+  function hlMarkdown(code) {
+    return hlLines(code, function (line) {
+      var m = line.match(/^(\s*)(#{1,6})(\s+)(.*)$/);
+      if (m) return esc(m[1]) + hlSpan('com', m[2]) + esc(m[3]) + hlSpan('com', m[4]);
+      m = line.match(/^(\s*)([-*+]|\d+[.)])(\s+)(.*)$/);
+      if (m) return esc(m[1]) + hlSpan('kw', m[2]) + esc(m[3]) + hlInlineMd(m[4]);
+      m = line.match(/^(\s*>+)(\s*)(.*)$/);
+      if (m) return hlSpan('com', m[1]) + esc(m[2]) + hlInlineMd(m[3]);
+      return hlInlineMd(line);
+    });
+  }
+  function hlInlineMd(s) {
+    var out = '', i = 0;
+    while (i < s.length) {
+      var rest = s.slice(i), m;
+      m = rest.match(/^`[^`\n]*`/);
+      if (m) { out += hlSpan('str', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^\[[^\]\n]*\]\([^)\n]*\)/);
+      if (m) {
+        var parts = m[0].match(/^(\[[^\]\n]*\])(\([^)\n]*\))$/);
+        out += hlSpan('var', parts[1]) + hlSpan('str', parts[2]);
+        i += m[0].length; continue;
+      }
+      m = rest.match(/^\*\*[^*\n]+\*\*|^__[^_\n]+__/);
+      if (m) { out += hlSpan('lit', m[0]); i += m[0].length; continue; }
+      m = rest.match(/^\*[^*\n]+\*|^_[^_\n]+_/);
+      if (m) { out += hlSpan('lit', m[0]); i += m[0].length; continue; }
+      out += esc(s[i]); i++;
+    }
+    return out;
+  }
+
+  /* 把高亮后的 HTML 按行拆开、每行包一层 <span class="cl">。
+   * 目的：软换行的续行要做悬挂缩进，而 CSS 的 text-indent 只作用于块的首行，必须逐行成块。
+   * 拆行时把跨行的 <span> 在行尾闭合、下一行重新打开，保证标签配平。
+   * 续行缩进跟着「这一行自己的行首缩进」走（--i = 前导空白占的列数），
+   * 与编辑器 wrappingIndent:'same' 一致：行首缩 4 格续行就缩 4 格，行首顶格续行也顶格。 */
+  function leadingCols(html) {
+    var text = String(html).replace(/<[^>]*>/g, ''); /* 高亮会把行首空白裹进 <span>，所以先剥标签 */
+    var col = 0;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charAt(i);
+      if (c === ' ') col++;
+      else if (c === '\t') col += 8 - (col % 8); /* 跟着 CSS 默认 tab-size:8 的制表位走 */
+      else break;
+    }
+    return col;
+  }
+  function splitCodeLines(html) {
+    var out = [], cur = '', open = [], last = 0, m;
+    var re = /<span\b[^>]*>|<\/span>|\n/g;
+    var closeAll = function () { return open.length ? new Array(open.length + 1).join('</span>') : ''; };
+    while ((m = re.exec(html))) {
+      cur += html.slice(last, m.index);
+      last = m.index + m[0].length;
+      if (m[0] === '\n') {
+        out.push(cur + closeAll());
+        cur = open.join('');
+      } else if (m[0] === '</span>') {
+        open.pop();
+        cur += '</span>';
+      } else {
+        open.push(m[0]);
+        cur += m[0];
+      }
+    }
+    cur += html.slice(last);
+    out.push(cur + closeAll());
+    return out.map(function (l) {
+      var ind = leadingCols(l);
+      return '<span class="cl"' + (ind ? ' style="--i:' + ind + '"' : '') + '>' + l + '</span>';
+    }).join('');
+  }
+
+  function highlightRaw(code, lang) {
+    var id = String(lang || '').toLowerCase();
+    var cfg = LANGS[id] || LANGS.default;
+    var text = String(code == null ? '' : code);
+    if (id === 'diff') {
+      return hlLines(text, function (line) {
+        if (/^\+/.test(line)) return hlSpan('add', line);
+        if (/^-/.test(line)) return hlSpan('del', line);
+        if (/^@@/.test(line)) return hlSpan('kw', line);
+        return esc(line);
+      });
+    }
+    if (id === 'markdown') return hlMarkdown(text);
+    if (id === 'html' || id === 'xml') return hlTags(text);
+    if (id === 'css') return hlCss(text);
+    if (id === 'json') return hlJson(text);
+    if (id === 'yaml' || id === 'toml' || id === 'ini') return hlKeyValue(text, id);
+    return hlGeneric(text, cfg, id);
+  }
+
+  function highlight(code, lang) { return splitCodeLines(highlightRaw(code, lang)); }
 
   /* ---------- 块渲染 ---------- */
   function renderBlocks(tokens, opts) {
@@ -1331,12 +1792,32 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
         return '<div class="math-block">$$' + t.tex.trim() + '$$</div>';
       case 'code': {
         if (t.lang.toLowerCase() === 'mermaid') {
-          /* Mermaid 图：保留原文，渲染后由 mermaid 库接管；无库时 CSS 显示为代码块 */
-          return '<div class="mermaid">' + esc(t.code) + '</div>';
+          /* Mermaid 图：保留原文，渲染后由 mermaid 库接管；无库时 CSS 显示为代码块。
+             data-src 存原文，切换亮/暗主题时据此重绘（mermaid 主题是渲染时烘进 SVG 的） */
+          return '<div class="mermaid" data-src="' + attrEsc(t.code) + '">' + esc(t.code) + '</div>';
         }
         var lang = /^[a-zA-Z0-9_+-]+$/.test(t.lang) ? t.lang.toLowerCase() : '';
         var code = t.code.replace(/\n+$/, '');
-        return '<pre' + (lang ? ' data-lang="' + lang + '"' : '') + '><code>' + highlight(esc(code), lang) + '</code></pre>';
+        /* 代码块 = 原版深色卡片 + 右上角「显示模式切换 + 语言角标」；角标悬停/点击才弹出「复制 / 下载」。
+         * highlight 接收原始代码，内部自行转义。
+         * 显示模式：不带语言名（或语言名为 text）默认「普通模式」= 不换行、保持原样；
+         *           带了语言名默认「代码模式」= 自动换行 + 续行跟行首缩进。 */
+        var mode = codeModeDefault(lang);
+        return '<div class="code-block" data-mode="' + mode + '"' + (lang ? ' data-lang="' + attrEsc(lang) + '"' : '') + '>' +
+          '<span class="code-tools-bar">' +
+            codeModeButton(mode) +
+            '<span class="code-tools">' +
+              '<button type="button" class="code-lang" title="代码操作">' + esc(lang || 'text') + '</button>' +
+              '<span class="code-acts">' +
+                '<button type="button" class="code-act" data-act="copy" title="复制代码">' +
+                  '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>复制</button>' +
+                '<button type="button" class="code-act" data-act="download" title="下载代码">' +
+                  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>下载</button>' +
+              '</span>' +
+            '</span>' +
+          '</span>' +
+          '<pre><code>' + highlight(code, lang) + '</code></pre>' +
+        '</div>';
       }
       case 'quote':
         return '<blockquote>' + renderBlocks(parseBlocks(t.inner)) + '</blockquote>';
@@ -1389,17 +1870,41 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
 
   function renderDoc(md) {
     slugSeen = {}; /* 标题锚点计数按文档重置（大标题/引用块里的标题共用一套去重） */
-    /* 收集脚注定义 [^id]: 内容（支持后续缩进延续行），从正文移除 */
+    /* 收集脚注定义 [^id]: 内容（顶格写，紧跟的缩进行并入同一条），并从正文移除。
+     * ⚠️ 必须跳过围栏代码块内部：代码块里的 [^1]: 只是示例文本，不能被收走当脚注 */
     var fnMap = {}, fnOrder = [];
-    var body = String(md).replace(/^\[\^([^\]]+)\]:[ \t]*(.*)(?:\n[ \t]+.*)*$/gm, function (m, id, first) {
-      if (!(id in fnMap)) {
-        var lines = m.split('\n');
-        fnMap[id] = [first].concat(lines.slice(1).map(function (l) { return l.replace(/^[ \t]+/, ''); })).join('\n');
-        fnOrder.push(id);
+    var src = String(md).replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+    var body = [], fence = null;
+    for (var li = 0; li < src.length; li++) {
+      var line = src[li];
+      if (fence) {
+        var cf = /^ {0,3}(`+|~+)\s*$/.exec(line);
+        if (cf && cf[1][0] === fence.ch && cf[1].length >= fence.len) fence = null;
+        body.push(line);
+        continue;
       }
-      return '';
-    });
-    var html = renderBlocks(parseBlocks(body), {});
+      var of = fenceRe.exec(line);
+      if (of) {
+        fence = { ch: of[1][0], len: of[1].length };
+        body.push(line);
+        continue;
+      }
+      var dm = /^\[\^([^\]]+)\]:[ \t]*(.*)$/.exec(line);
+      if (dm) {
+        if (!(dm[1] in fnMap)) {
+          var def = [dm[2]];
+          var dj = li + 1;
+          while (dj < src.length && /^[ \t]/.test(src[dj])) { def.push(src[dj].replace(/^[ \t]+/, '')); dj++; }
+          fnMap[dm[1]] = def.join('\n');
+          fnOrder.push(dm[1]);
+          li = dj - 1;
+        }
+        body.push(''); /* 定义行留在原处一个空行，保证上下文的段落分隔不变 */
+        continue;
+      }
+      body.push(line);
+    }
+    var html = renderBlocks(parseBlocks(body.join('\n')), {});
     if (fnOrder.length) {
       html += '\n<section class="footnotes">\n<hr>\n<ol>\n' + fnOrder.map(function (id) {
         return '<li id="fn-' + esc(id) + '">' + inline(fnMap[id]) + '</li>';
@@ -1781,6 +2286,77 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     return '#' + ca.map(function (v, i) { return hx(v * t + cb[i] * (1 - t)); }).join('');
   }
 
+  /* ---------- 编辑区代码块高亮：给 Monaco 补齐各语言的轻量 tokenizer ----------
+   * Monaco 内置的 markdown 语法**只对 ```语言 围栏做嵌入高亮**（nextEmbedded），而离线 Monaco
+   * 包里默认只注册了 plaintext / markdown 两种语言 —— 于是：
+   *   · ```ts 围栏里拿不到任何 token → 一片纯白（看着像没上色）
+   *   · ~~~ts 围栏走的是另一条状态、不嵌入，整块只有一种颜色
+   * 这里按预览区同一套语言表（LANGS）注册 tokenizer，```语言 围栏里就能真正按语言上色。
+   * 注意 markdown 本身不覆盖（保留内置词法）。 */
+  function monarchFor(id) {
+    var cfg = LANGS[id] || { k: '' };
+    var keys = cfg.k ? cfg.k.split(/\s+/).filter(Boolean) : [];
+    var hash = /^(python|py|bash|sh|shell|yaml|toml|ini)$/.test(id); /* # 注释 */
+    var tag = /^(html|xml)$/.test(id);                               /* <!-- --> 注释 */
+    var sql = id === 'sql';                                          /* -- 注释 */
+    var root = [];
+    if (tag) {
+      root.push([/<!--[\s\S]*?-->/, 'comment']);
+      root.push([/<\/?[A-Za-z][\w:.-]*/, 'tag']);
+      root.push([/\/?>/, 'tag']);
+    } else if (sql) {
+      root.push([/--.*$/, 'comment']);
+      root.push([/\/\*/, 'comment', '@bc']);
+    } else if (hash) {
+      root.push([/#.*$/, 'comment']);
+    } else {
+      root.push([/\/\/.*$/, 'comment']);
+      root.push([/\/\*/, 'comment', '@bc']);
+    }
+    root.push([/"(?:[^"\\]|\\.)*"/, 'string']);
+    root.push([/'[^']*'/, 'string']);
+    if (!tag) root.push([/`[^`]*`/, 'string']);
+    if (keys.length) root.push([/[A-Za-z_$][\w$]*/, { cases: { '@keywords': 'keyword', '@default': '' } }]);
+    root.push([/\d+(?:\.\d+)?/, 'number']);
+    var tk = { root: root };
+    if (!tag && !hash) tk.bc = [[/\*\//, 'comment', '@pop'], [/./, 'comment']];
+    return { defaultToken: '', keywords: keys, tokenizer: tk };
+  }
+  function registerEditorLanguages() {
+    if (!window.monaco || window.__mdEditorLangs) return;
+    window.__mdEditorLangs = 1;
+    var have = {};
+    monaco.languages.getLanguages().forEach(function (l) { have[l.id] = 1; });
+    Object.keys(LANGS).forEach(function (id) {
+      if (id === 'default' || id === 'markdown' || have[id]) return; /* markdown 用内置词法 */
+      try {
+        monaco.languages.register({ id: id });
+        monaco.languages.setMonarchTokensProvider(id, monarchFor(id));
+      } catch (e) {}
+    });
+
+    /* Monaco 内置 markdown 词法里，~~~语言 围栏走的是「不嵌入」的那条规则（只有 ```语言 才 nextEmbedded），
+     * 结果 ~~~ 代码块在编辑区只有一种颜色。这里在它注册词法时顺手把 ~~~ 规则也改成嵌入选中的语言。
+     * 纯补丁：属性/正则都对不上就原样放行，不影响其它行为。 */
+    var origSet = monaco.languages.setMonarchTokensProvider;
+    monaco.languages.setMonarchTokensProvider = function (id, def) {
+      if (id === 'markdown' && def && def.tokenizer && def.tokenizer.root) {
+        try {
+          var root = def.tokenizer.root;
+          for (var i = 0; i < root.length; i++) {
+            var rule = root[i];
+            if (rule && rule[1] && rule[1].next === '@codeblock' && rule[0] instanceof RegExp &&
+                rule[0].source.indexOf('~~~') >= 0 && rule[0].source.indexOf('\\w') >= 0) {
+              rule[1].nextEmbedded = '$1'; /* $1 = 围栏后面的语言名 */
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+      return origSet.apply(monaco.languages, arguments);
+    };
+  }
+
   /* Monaco 主题跟随 app 亮/暗色变量（切主题时重新定义，变量值才最新） */
   function applyMdTheme() {
     if (!window.monaco) return;
@@ -1811,6 +2387,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
         { token: 'attribute.name.html.md', foreground: accent },
         { token: 'comment.md', foreground: text2 },              /* 引用块：默认主题是绿色，改中性灰 */
         { token: 'variable.md', foreground: codeColor },         /* 行内代码 */
+        { token: 'variable.source', foreground: codeColor },     /* 代码围栏内容（~~~ 或无语言 ``` 时整块） */
         { token: 'string.md', foreground: text2 }                /* 代码围栏反引号 */
       ],
       colors: {
@@ -1847,6 +2424,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   function ensureEditor() {
     if (mdEditor) return mdEditor;
     if (!window.monaco) return null;
+    registerEditorLanguages(); /* 先注册各语言词法，围栏里的代码块才会按语言上色 */
     applyMdTheme();
     var monoFont = cssVarOf('--font-mono', 'Consolas, "Microsoft YaHei", monospace');
     mdEditor = monaco.editor.create(editorHost, {
@@ -1920,7 +2498,10 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     $('#editorStats').textContent = f && f.stats ? (fmtNum(f.stats.lines) + ' 行 · ' + fmtNum(f.stats.words) + ' 字') : '';
   }
 
-  /* 进出编辑模式时保持阅读进度：滚动容器会从「整页」换成「#reader 内部」，按当前视口顶部的内容块续读 */
+  /* 进出编辑模式时保持阅读进度：滚动容器会从「整页」换成「#reader 内部」，按当前视口顶部的内容块续读。
+   * 关键：块本身可能比屏幕高得多（例如整篇就是一个大代码块），这时「视口顶部」落在块内部，
+   * 光把块顶对齐到顶部会一路回到块的起点（也就是页面开头）——必须把「块内偏移」一起带上。
+   * 另外编辑时预览每 300ms 会重渲染，元素引用会失效，所以只记块序号、用的时候再取。 */
   var READ_TOP_PAD = 104; /* 顶栏高度 + 一点呼吸空间 */
   function topVisibleBlock() {
     var nodes = mdBody.children;
@@ -1929,6 +2510,14 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       if (r.height > 0 && r.bottom > READ_TOP_PAD) return nodes[i];
     }
     return mdBody.firstElementChild;
+  }
+  function blockIndex(el) {
+    var nodes = mdBody.children;
+    for (var i = 0; i < nodes.length; i++) if (nodes[i] === el) return i;
+    return -1;
+  }
+  function blockAt(idx) {
+    return idx >= 0 && idx < mdBody.children.length ? mdBody.children[idx] : null;
   }
   /* 整页滚动默认是平滑的（html{scroll-behavior:smooth}），换模式要瞬移，否则会「滑」一大段 */
   function setPageScroll(y) {
@@ -1945,6 +2534,14 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     /* 先记住「正在读哪里」：已在顶部就不用管，直接走原来的回顶逻辑 */
     var atTop = on ? (window.scrollY || document.documentElement.scrollTop || 0) < 2 : reader.scrollTop < 2;
     var anchor = atTop ? null : topVisibleBlock();
+    /* 视口顶部相对锚点块顶部的偏移：块内部滚动时为正值，恢复时原样带回去 */
+    var inset = 0;
+    if (anchor) {
+      inset = on ? READ_TOP_PAD - anchor.getBoundingClientRect().top
+                 : reader.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
+      if (!(inset > 0)) inset = 0;
+    }
+    var anchorIdx = anchor ? blockIndex(anchor) : -1;
     document.body.classList.toggle('edit-mode', on);
     btnEdit.classList.toggle('active', on);
     editorPane.hidden = !on;
@@ -1960,16 +2557,19 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       reader.scrollTop = 0;
       requestAnimationFrame(function () {
         if (mdEditor) mdEditor.layout();
-        if (anchor) {
-          /* 让锚点块落回阅读区顶部，再把编辑器按比例对齐到同一位置 */
-          reader.scrollTop = Math.max(0, anchor.getBoundingClientRect().top - reader.getBoundingClientRect().top);
+        var node = blockAt(anchorIdx);
+        if (node) {
+          /* 让「原先在视口顶部的那一点」重新落到阅读区顶部，再把编辑器按比例对齐到同一位置 */
+          reader.scrollTop = Math.max(0, node.getBoundingClientRect().top - reader.getBoundingClientRect().top + inset);
           syncScroll('preview');
         }
       });
-    } else if (anchor) {
-      /* 退出编辑：预览回到「整页滚动」，把锚点块对回视口顶部 */
+    } else if (anchorIdx >= 0) {
+      /* 退出编辑：预览回到「整页滚动」，把同一点对回视口顶部 */
       requestAnimationFrame(function () {
-        setPageScroll(window.scrollY + anchor.getBoundingClientRect().top - READ_TOP_PAD);
+        var node = blockAt(anchorIdx);
+        if (!node) return;
+        setPageScroll(window.scrollY + node.getBoundingClientRect().top + inset - READ_TOP_PAD);
       });
     }
   }
@@ -2304,9 +2904,11 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   }
 
   /* Mermaid 图表点击放大（信息多的图放大看字） */
-  var zoomOverlay = null;
+  var zoomOverlay = null, zoomLayerOn = false;
   function closeZoom() {
-    if (zoomOverlay) zoomOverlay.classList.remove('show');
+    if (!zoomOverlay) return;
+    zoomOverlay.classList.remove('show');
+    if (zoomLayerOn) { zoomLayerOn = false; unregisterLayer(closeZoom); }
   }
   function zoomMermaid(svg) {
     if (!zoomOverlay) {
@@ -2336,6 +2938,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     btn.addEventListener('click', closeZoom);
     zoomOverlay.replaceChildren(box, btn);
     zoomOverlay.classList.add('show');
+    if (!zoomLayerOn) { zoomLayerOn = true; registerLayer(closeZoom); }  /* 返回键 / ESC 也能关掉 */
   }
   function bindMermaidZoom() {
     /* 事件委托：mermaid 渲染完成后会克隆/替换 svg，逐个绑定会丢监听；绑在 mdBody 上对所有 svg 生效 */
@@ -2396,7 +2999,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     });
   }
 
-  /* 脚注跳转：原生 # 跳转在 hash 未变化时不会再次滚动，这里统一接管并闪一下高亮 */
+  /* 脚注 / 标题锚点跳转：原生 # 跳转在 hash 未变化时不会再次滚动，这里统一接管、定位并闪一下高亮 */
   var fnFlashTimer = null;
   function flashFootnote(target) {
     var el = target;
@@ -2404,8 +3007,83 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     Array.prototype.slice.call(mdBody.querySelectorAll('.fn-flash')).forEach(function (n) { n.classList.remove('fn-flash'); });
     el.classList.add('fn-flash');
     if (fnFlashTimer) clearTimeout(fnFlashTimer);
-    fnFlashTimer = setTimeout(function () { el.classList.remove('fn-flash'); }, 1400);
+    fnFlashTimer = setTimeout(function () { el.classList.remove('fn-flash'); }, 2600);
   }
+
+  /* 锚点归一化：去掉标点/空格/连字符、全角转半角、统一小写。
+   * 这样 GitHub 的 21-启动--停止--重启--查看状态（斜杠两侧各留一个空格 → 两个连字符）
+   * 与本程序生成的 21-启动-停止-重启-查看状态 能互相命中，直接粘标题原文也行 */
+  function normAnchor(s) {
+    var t = String(s || '');
+    try { t = t.normalize('NFKC'); } catch (e) {}
+    return t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  }
+  function lookupAnchor(id) {
+    if (!id) return null;
+    var el = document.getElementById(id);
+    if (el && mdBody.contains(el)) return el;
+    /* 界面元素可能占用了同名 id（如 reader）；正文里另有同 id 时以正文为准 */
+    if (/^[^{}\[\]"\\]+$/.test(id)) {
+      var exact = mdBody.querySelector('[id="' + id + '"]');
+      if (exact) return exact;
+    }
+    var want = normAnchor(id);
+    if (!want) return null;
+    var i, nodes = mdBody.querySelectorAll('[id]');
+    for (i = 0; i < nodes.length; i++) if (normAnchor(nodes[i].id) === want) return nodes[i];
+    var hs = mdBody.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (i = 0; i < hs.length; i++) if (normAnchor(hs[i].textContent) === want) return hs[i];
+    return null;
+  }
+
+  /* 跳转落点：目标放在视口 20% 高度处（上方留一点上下文，标题下面的内容尽量多露出来） */
+  var ANCHOR_TOP_RATIO = 0.2;
+  var anchorSettle = null;
+  function cancelAnchorSettle() {
+    if (anchorSettle) { clearTimeout(anchorSettle.timer); anchorSettle = null; }
+  }
+  /* 用户一旦自己滚了（滚轮 / 触摸 / 拖滚动条 / 按键）就放弃补正，别把人拽回去 */
+  ['wheel', 'touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, cancelAnchorSettle, { passive: true });
+  });
+
+  function scrollToAnchor(target) {
+    var box = null, n = target.parentNode;
+    while (n && n.nodeType === 1 && n !== document.body && n !== document.documentElement) {
+      var cs = getComputedStyle(n);
+      if (/(auto|scroll|overlay)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) { box = n; break; }
+      n = n.parentNode;
+    }
+    var viewH = box ? box.clientHeight : window.innerHeight;
+    var want = Math.max(64, Math.round(viewH * ANCHOR_TOP_RATIO)); /* 视口很矮时别贴到顶栏下面 */
+    var offsetOf = function () {
+      return target.getBoundingClientRect().top - (box ? box.getBoundingClientRect().top : 0);
+    };
+    var place = function (behavior) {
+      var top = (box ? box.scrollTop : window.scrollY) + offsetOf() - want;
+      top = Math.max(0, top);
+      if (box) box.scrollTo({ top: top, behavior: behavior });
+      else window.scrollTo({ top: top, behavior: behavior });
+    };
+
+    cancelAnchorSettle();
+    place('smooth');
+    /* 惰性图片 / 图表会在滚动途中撑开版面，把落点顶偏 → 之后一小段时间内补正几次，直到位置稳定 */
+    var state = { timer: 0, left: 5 };
+    anchorSettle = state;
+    var tick = function () {
+      if (anchorSettle !== state) return;
+      if (!document.documentElement.contains(target)) { anchorSettle = null; return; }
+      var before = box ? box.scrollTop : window.scrollY;
+      if (Math.abs(offsetOf() - want) > 8) place('auto');
+      var after = box ? box.scrollTop : window.scrollY;
+      if (Math.abs(after - before) < 2) { anchorSettle = null; return; } /* 已滚到底，补正也没用 */
+      if (state.left-- > 0) state.timer = setTimeout(tick, 260);
+      else anchorSettle = null;
+    };
+    state.timer = setTimeout(tick, 280);
+  }
+
   function bindFootnoteJump() {
     if (mdBody.dataset.fnJumpBound) return;
     mdBody.dataset.fnJumpBound = '1';
@@ -2415,15 +3093,10 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       var id = (a.getAttribute('href') || '').slice(1);
       if (!id) return;
       try { id = decodeURIComponent(id); } catch (err) {}
-      var target = document.getElementById(id);
-      /* 界面元素可能占用了同名 id（如 reader）；正文里另有同 id 时以正文为准 */
-      if ((!target || !mdBody.contains(target)) && /^[^{}\[\]"\\]+$/.test(id)) {
-        var inBody = mdBody.querySelector('[id="' + id + '"]');
-        if (inBody) target = inBody;
-      }
-      if (!target || !mdBody.contains(target)) return; /* 正文内无此锚点 → 交回浏览器默认行为 */
+      var target = lookupAnchor(id);
+      if (!target) return; /* 正文内无此锚点 → 交回浏览器默认行为 */
       e.preventDefault();
-      target.scrollIntoView({ block: 'center' });
+      scrollToAnchor(target);
       flashFootnote(target);
     });
   }
@@ -2449,14 +3122,129 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
     });
   }
 
+  /* ---------- 代码块显示模式：普通模式 / 代码模式 ----------
+   * 普通模式：不软换行、不做续行缩进（保持原样，长行横向滚动）——ASCII 流程图 / 管线图这类
+   *           「排版即内容」的块用它；不带语言名或语言名为 text 的块默认走这里。
+   * 代码模式：软换行 + 续行跟该行行首缩进（等价 Monaco wrappingIndent:'same'）——带语言名的块默认。
+   * 用户手动切换的结果按块序号记在文件对象上（f.codeModes），重渲染（编辑区改动、切主题）后仍在。 */
+  function codeModeDefault(lang) { return (!lang || lang === 'text') ? 'plain' : 'code'; }
+  function codeModeLabel(mode) { return mode === 'plain' ? '普通模式' : '代码模式'; }
+  function codeModeTitle(mode) {
+    return mode === 'plain'
+      ? '当前为 普通模式：无自动软换行和自动缩进，保持代码原本的整体结构 · 点击切换为 代码模式'
+      : '当前为 代码模式：超出代码块时自动进行软换行，续行与行首缩进对齐 · 点击切换为 普通模式';
+  }
+  function codeModeButton(mode) {
+    return '<button type="button" class="code-mode" title="' + attrEsc(codeModeTitle(mode)) + '" ' +
+           'aria-label="' + attrEsc(codeModeTitle(mode)) + '">' + codeModeLabel(mode) + '</button>';
+  }
+  function applyCodeMode(block, mode) {
+    block.setAttribute('data-mode', mode);
+    var btn = block.querySelector('.code-mode');
+    if (btn) {
+      btn.textContent = codeModeLabel(mode);
+      btn.title = codeModeTitle(mode);
+      btn.setAttribute('aria-label', btn.title);
+    }
+  }
+  function toggleCodeMode(block) {
+    if (!block) return;
+    var next = block.getAttribute('data-mode') === 'plain' ? 'code' : 'plain';
+    applyCodeMode(block, next);
+    var f = currentFile();
+    if (f) {
+      var idx = Array.prototype.indexOf.call(mdBody.querySelectorAll('.code-block'), block);
+      if (idx >= 0) { if (!f.codeModes) f.codeModes = {}; f.codeModes[idx] = next; }
+    }
+  }
+  function applyCodeModes() {
+    var f = currentFile();
+    var modes = (f && f.codeModes) || null;
+    if (!modes) return;
+    Array.prototype.forEach.call(mdBody.querySelectorAll('.code-block'), function (block, i) {
+      if (modes[i]) applyCodeMode(block, modes[i]);
+    });
+  }
+
+  /* 代码块顶栏按钮：复制 / 下载（事件委托，重渲染后依然有效） */
+  function bindCodeActions() {
+    if (mdBody.dataset.codeActBound) return;
+    mdBody.dataset.codeActBound = '1';
+    var closeAll = function (except) {
+      mdBody.querySelectorAll('.code-tools.open').forEach(function (t) { if (t !== except) t.classList.remove('open'); });
+    };
+    mdBody.addEventListener('click', function (e) {
+      /* 点「普通模式 / 代码模式」按钮：只切换显示模式，不碰复制下载面板 */
+      var modeBtn = e.target && e.target.closest ? e.target.closest('.code-mode') : null;
+      if (modeBtn && mdBody.contains(modeBtn)) {
+        toggleCodeMode(modeBtn.closest('.code-block'));
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      /* 点语言角标：切换按钮面板（触屏没有 hover，靠这一下） */
+      var lang = e.target && e.target.closest ? e.target.closest('.code-lang') : null;
+      if (lang && mdBody.contains(lang)) {
+        var tools = lang.closest('.code-tools');
+        var on = tools.classList.contains('open');
+        closeAll(tools);
+        tools.classList.toggle('open', !on);
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      var btn = e.target && e.target.closest ? e.target.closest('.code-act') : null;
+      if (!btn || !mdBody.contains(btn)) { closeAll(null); return; }
+      closeAll(btn.closest('.code-tools')); /* 只收起其它块的面板，本块保持展开（方便接着点另一个按钮） */
+      var block = btn.closest ? btn.closest('.code-block') : null;
+      var codeEl = block ? block.querySelector('pre code') : null;
+      if (!codeEl) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var text = codeEl.textContent;
+      if (btn.getAttribute('data-act') === 'copy') {
+        var ok = function () {
+          var old = btn.innerHTML;
+          btn.classList.add('done');
+          btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>已复制';
+          setTimeout(function () { btn.classList.remove('done'); btn.innerHTML = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(ok, function () { fallbackCopy(text); ok(); });
+        } else { fallbackCopy(text); ok(); }
+      } else {
+        var blockLang = (block.getAttribute('data-lang') || 'txt');
+        var ext = { js: 'js', jsx: 'jsx', ts: 'ts', json: 'json', css: 'css', html: 'html', xml: 'xml',
+                    python: 'py', py: 'py', bash: 'sh', sh: 'sh', shell: 'sh', sql: 'sql', java: 'java',
+                    c: 'c', cpp: 'cpp', go: 'go', rust: 'rs', yaml: 'yml', toml: 'toml', ini: 'ini',
+                    markdown: 'md', diff: 'diff' }[blockLang] || 'txt';
+        var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'snippet.' + ext;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        showToast('已下载代码片段：snippet.' + ext);
+      }
+    });
+  }
+
+  /* 渲染后处理。返回一个 promise：MathJax 排版 + mermaid 绘制都算「重活」，
+   * 主题切换时要在 View Transition 的回调里等它们干完，否则截到的「切换后」还是旧配色的图。 */
   function postRender() {
     /* 脚注：编号 + 双向跳转锚点 */
     bindFootnotes();
     bindFootnoteJump();
     bindSpoilers();
+    bindCodeActions();
+    applyCodeModes(); /* 恢复本文件里手动切换过的代码块显示模式 */
+    var jobs = [];
     /* MathJax：渲染数学公式（库加载后或稍后 load 事件都会触发） */
     if (window.MathJax && MathJax.typesetPromise) {
-      MathJax.typesetPromise([mdBody]).catch(function () {});
+      jobs.push(MathJax.typesetPromise([mdBody]).catch(function () {}));
     }
     /* Mermaid：渲染图表（只处理尚未渲染的；无库时回退为代码块样式） */
     var els = Array.prototype.slice.call(mdBody.querySelectorAll('.mermaid')).filter(function (el) {
@@ -2466,11 +3254,13 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       if (window.mermaid) {
         try {
           mermaid.initialize({ startOnLoad: false, theme: (html.dataset.theme === 'light' ? 'default' : 'dark') });
-          mermaid.run({ nodes: els }).then(function () {
+          jobs.push(mermaid.run({ nodes: els }).then(function () {
+            /* 只有真出了 svg 才算渲染成功（mermaid 遇到 data-processed 会静默跳过） */
+            els.forEach(function (el) { if (el.querySelector('svg')) el.dataset.rendered = html.dataset.theme; });
             bindMermaidZoom(); /* svg 渲染完成后再绑定点击放大 */
           }).catch(function () {
             els.forEach(fallbackMermaid);
-          });
+          }));
         } catch (e) {
           els.forEach(fallbackMermaid);
         }
@@ -2479,6 +3269,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
       }
     }
     bindMermaidZoom(); /* 已渲染图表绑定点击放大（含 load 后补渲染的） */
+    return Promise.all(jobs);
   }
 
   function copyHtml() {
@@ -2509,20 +3300,113 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   };
   var btnTheme = $('#btnTheme');
   var themeAnimTimer = null;
-  /* animate=false 用于首屏：避免刚打开就先演一遍过渡 */
-  function setTheme(t, animate) {
-    if (animate !== false && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-      html.classList.add('theme-anim');
-      void html.offsetWidth; /* 先让过渡规则落到样式上，紧接着改主题才会真的「过渡」而不是瞬切 */
-      if (themeAnimTimer) clearTimeout(themeAnimTimer);
-      themeAnimTimer = setTimeout(function () { html.classList.remove('theme-anim'); }, 420);
-    }
+  var themeWanted = null; /* 最近一次「想要」的主题：连点时以它为准，不要读还没落地的 DOM 状态
+                           （View Transition 的 DOM 改动在回调里执行，会有几十到几百毫秒的时间差） */
+  function nextTheme() { return (themeWanted || html.dataset.theme) === 'dark' ? 'light' : 'dark'; }
+
+  /* ---- 主题切换时 mermaid 按需重绘 ----
+   * 一张图重绘约 10ms，图一多就致命：实测 36 张图全量重绘要 358ms，主线程被卡住这么久，
+   * 主题过渡就被整个吞掉了（看起来是「先卡一下再整体变色」）。所以只重绘视口附近的图，
+   * 其余的挂进待办，滚到附近再补——它们的尺寸不变，不会引起版面跳动。 */
+  var pendingMermaid = [];
+  var pendingFlushRaf = 0;
+
+  /* margin：判定「算在视口附近」的额外余量。切换主题时只补屏幕上真正看得见的那几张（余量小，
+   * 免得白算十几张图把过渡推迟）；滚动补绘时余量大，等它滚到眼前时早就换好色了。 */
+  function nearViewport(el, margin) {
+    var r = el.getBoundingClientRect();
+    var h = window.innerHeight || 800;
+    var m = margin == null ? 300 : margin;
+    return r.bottom > -m && r.top < h + m;
+  }
+  function rerenderMermaid(nodes) {
+    nodes.forEach(function (el) {
+      el.textContent = el.dataset.src;
+      el.removeAttribute('data-processed'); /* mermaid 靠这个属性跳过「已渲染」的节点，不清掉就不会重绘 */
+      delete el.dataset.rendered;
+    });
+    return postRender();
+  }
+  function flushPendingMermaid() {
+    pendingFlushRaf = 0;
+    if (!pendingMermaid.length) return;
+    var hit = [], keep = [];
+    pendingMermaid.forEach(function (el) {
+      if (!el.isConnected || el.dataset.rendered === html.dataset.theme) return; /* 节点已作废 / 已经补上 */
+      (nearViewport(el, 800) ? hit : keep).push(el);
+    });
+    pendingMermaid = keep;
+    if (hit.length) rerenderMermaid(hit).then(function () { schedulePendingFlush(); });
+  }
+  function schedulePendingFlush() {
+    if (pendingFlushRaf || !pendingMermaid.length) return;
+    pendingFlushRaf = requestAnimationFrame(flushPendingMermaid);
+  }
+  function queuePendingMermaid(nodes) {
+    if (!nodes.length) return;
+    pendingMermaid = pendingMermaid.concat(nodes);
+    if (queuePendingMermaid.bound) return;
+    queuePendingMermaid.bound = 1;
+    ['scroll', 'resize'].forEach(function (ev) { window.addEventListener(ev, schedulePendingFlush, { passive: true }); });
+    if (reader) reader.addEventListener('scroll', schedulePendingFlush, { passive: true });
+    /* 兜底：用户一直不滚动的话，隔一会儿也把剩下的补上（仍然只补视口附近的） */
+    setInterval(schedulePendingFlush, 1500);
+  }
+
+  /* 亮暗主题切换后重绘 mermaid（mermaid 的主题色在渲染时就写进 SVG 了，不重绘会一直是旧配色）。
+   * 返回 promise：等「视口附近」那批重绘完成，供 View Transition 截「切换后」那一帧。 */
+  function refreshMermaid() {
+    if (!window.mermaid || !mdBody) return Promise.resolve();
+    var stale = Array.prototype.slice.call(mdBody.querySelectorAll('.mermaid[data-src]')).filter(function (el) {
+      return el.dataset.rendered && el.dataset.rendered !== html.dataset.theme && el.querySelector('svg');
+    });
+    if (!stale.length) { flushPendingMermaid(); return Promise.resolve(); }
+    var near = [], far = [];
+    stale.forEach(function (el) { (nearViewport(el, 300) ? near : far).push(el); });
+    closeZoom(); /* 放大浮层里是旧图，直接关掉 */
+    var p = rerenderMermaid(near);
+    queuePendingMermaid(far);
+    return p;
+  }
+
+  /* 切主题的「重活」都在这里：改根属性 + 按钮文案 + Monaco 重配主题 + 重绘 mermaid。
+   * 返回 promise，供 View Transition 等它干完再截「切换后」那一帧。 */
+  function applyThemeSwitch(t) {
     html.dataset.theme = t;
     try { localStorage.setItem('md-theme', t); } catch (e) {}
     btnTheme.querySelector('.mi-icon').innerHTML = t === 'dark' ? ICONS.sun : ICONS.moon;
     btnTheme.querySelector('.mi-text').textContent = t === 'dark' ? '切换到亮色主题' : '切换到暗色主题';
-    btnTheme.title = t === 'dark' ? '切换到亮色主题' : '切换到暗色主题';
+    btnTheme.title = btnTheme.querySelector('.mi-text').textContent;
     if (typeof applyMdTheme === 'function') applyMdTheme();
+    if (typeof refreshMermaid === 'function') return refreshMermaid();
+  }
+
+  /* animate=false 用于首屏：避免刚打开就先演一遍过渡 */
+  function setTheme(t, animate) {
+    themeWanted = t;
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (animate === false || reduce || !document.startViewTransition) {
+      /* 老路子：给 <html> 挂 .theme-anim，让元素各自过渡（兼容性广，但逐元素过渡在长文档上会掉帧） */
+      if (animate !== false && !reduce) {
+        html.classList.add('theme-anim');
+        void html.offsetWidth; /* 先让过渡规则落到样式上，紧接着改主题才会真的「过渡」而不是瞬切 */
+        if (themeAnimTimer) clearTimeout(themeAnimTimer);
+        themeAnimTimer = setTimeout(function () { html.classList.remove('theme-anim'); }, 420);
+      }
+      applyThemeSwitch(t);
+      return;
+    }
+    /* 首选：View Transition。浏览器把「切换前」整屏截一张图 → 在回调里干完所有重活
+     * （重绘 mermaid、给 Monaco 换主题、超长文档重排重绘）→ 再对「切换后」整屏做一次
+     * 合成层淡入淡出。好处：① 不再给每个 DOM 节点挂 transition，文档多大、代码块多少都不卡；
+     * ② 重活不会把过渡「吞掉」——以前 mermaid 重绘要卡住主线程 400ms，340ms 的过渡直接演完/丢帧，
+     * 看起来就是「先卡一下再整体变色」。 */
+    try {
+      var vt = document.startViewTransition(function () { return applyThemeSwitch(t); });
+      if (vt && vt.finished && vt.finished.catch) vt.finished.catch(function () {});
+    } catch (err) {
+      applyThemeSwitch(t);
+    }
   }
   setTheme(html.dataset.theme || 'dark', false);
 
@@ -2535,15 +3419,55 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   }
   setFont(html.dataset.font || 'serif');
 
+  /* ---------- 二级菜单与手机「返回键」 ----------
+   * 手机端（安卓 Chrome）按返回键默认直接退出页面。这里让每个打开的二级菜单
+   * （更多菜单 / 文件库 / 图表放大浮层）占用一条历史记录：返回键触发的 popstate
+   * 先关掉最上面那一层，并且只要还有层开着就再压一条守卫，只有在没有任何层时才真的离开页面。
+   * 用按钮、ESC、点遮罩关掉时，把占用的那条历史记录一起回退，保证历史干净
+   * ——不会出现「关掉菜单后按返回还要空按一次」。 */
+  var mdLayers = [];     /* 已打开的层，元素是「关掉这一层」的函数，后进先出 */
+  var mdLayerBack = 0;   /* 程序化 history.back() 的计数：分辨 popstate 是不是自己触发的 */
+
+  /* 关闭用的是 history.back()，而浏览器在历史回退时默认会「恢复那条记录里的滚动位置」：
+   * 打开文件库时记录的是当时旧文档的阅读位置，于是在文件库里切换文档后一关文件库，
+   * 新文档就被拽回旧文档的滚动距离（不够长就滚到底）。阅读位置本来就由本程序自己管
+   * （renderReader 会滚到顶部、锚点跳转自己算落点），所以关掉浏览器的自动恢复。 */
+  if ('scrollRestoration' in history) { try { history.scrollRestoration = 'manual'; } catch (err) {} }
+
+  function pushLayerGuard() { try { history.pushState({ mdLayer: 1 }, ''); } catch (err) {} }
+  function registerLayer(dismiss) {
+    mdLayers.push(dismiss);
+    if (mdLayers.length === 1) pushLayerGuard();
+  }
+  function unregisterLayer(dismiss) {
+    var i = mdLayers.lastIndexOf(dismiss);
+    if (i < 0) return;                    /* 已经不在栈里（是返回键关掉的），什么都不用做 */
+    mdLayers.splice(i, 1);
+    if (mdLayers.length) return;          /* 还有别的层开着，守卫留给它 */
+    mdLayerBack++;
+    try { history.back(); } catch (err) { mdLayerBack--; return; }
+    /* 万一历史里没有上一条、popstate 不来，超时把计数清掉，免得吃掉下一次返回键 */
+    setTimeout(function () { if (mdLayerBack > 0) mdLayerBack--; }, 700);
+  }
+  window.addEventListener('popstate', function () {
+    if (mdLayerBack > 0) { mdLayerBack--; return; }   /* 这是上面 history.back() 的回声 */
+    if (!mdLayers.length) return;                    /* 没有二级菜单：正常后退，交给浏览器 */
+    mdLayers.pop()();                                /* 先关最上面那一层 */
+    if (mdLayers.length) pushLayerGuard();            /* 下面还有层，补一条守卫 */
+  });
+
   /* ---------- 侧边栏开合 ---------- */
+  var sidebarLayerOn = false;
   function openSidebar() {
     renderSidebar();
     document.body.classList.add('side-open');
     $('#btnSidebar').classList.add('active');
+    if (!sidebarLayerOn) { sidebarLayerOn = true; registerLayer(closeSidebar); }
   }
   function closeSidebar() {
     document.body.classList.remove('side-open');
     $('#btnSidebar').classList.remove('active');
+    if (sidebarLayerOn) { sidebarLayerOn = false; unregisterLayer(closeSidebar); }
   }
   $('#btnSidebar').addEventListener('click', function () {
     document.body.classList.contains('side-open') ? closeSidebar() : openSidebar();
@@ -2552,6 +3476,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   $('#backdrop').addEventListener('click', closeSidebar);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
+      closeZoom();
       closeSidebar();
       disarmClear();
       closeMoreMenu();
@@ -2560,14 +3485,19 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
 
   /* ---------- 「更多」菜单 ---------- */
   var btnMore = $('#btnMore'), moreMenu = $('#moreMenu');
+  var moreLayerOn = false;
+  function openMoreMenu() {
+    moreMenu.hidden = false;
+    btnMore.classList.add('active');
+    if (!moreLayerOn) { moreLayerOn = true; registerLayer(closeMoreMenu); }
+  }
   function closeMoreMenu() {
     moreMenu.hidden = true;
     btnMore.classList.remove('active');
+    if (moreLayerOn) { moreLayerOn = false; unregisterLayer(closeMoreMenu); }
   }
   function toggleMoreMenu() {
-    var open = moreMenu.hidden;
-    moreMenu.hidden = !open;
-    btnMore.classList.toggle('active', open);
+    if (moreMenu.hidden) openMoreMenu(); else closeMoreMenu();
   }
   btnMore.addEventListener('click', function (e) {
     e.stopPropagation();
@@ -2578,7 +3508,7 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
   });
 
   /* ---------- 主题 / 字体 / 清空按钮 ---------- */
-  btnTheme.addEventListener('click', function () { setTheme(html.dataset.theme === 'dark' ? 'light' : 'dark'); });
+  btnTheme.addEventListener('click', function () { setTheme(nextTheme()); });
   btnFont.addEventListener('click', function () { setFont(html.dataset.font === 'serif' ? 'sans' : 'serif'); });
 
   var clearTimer = null;
@@ -2606,6 +3536,17 @@ window.addEventListener('error', function (e) { window.__errs.push(String(e.mess
 
   /* ---------- 文件选择 ---------- */
   $('#btnBrowse').addEventListener('click', function () { $('#fileInput').click(); });
+  /* 「更多」菜单里的导入（已有文件打开时也能用，不用先清空列表） */
+  $('#btnImportFile').addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeMoreMenu();
+    $('#fileInput').click();
+  });
+  $('#btnImportFolder').addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeMoreMenu();
+    $('#folderInput').click();
+  });
   $('#fileInput').addEventListener('change', function () {
     if (this.files && this.files.length) addFiles(this.files);
     this.value = '';
